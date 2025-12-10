@@ -1,38 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { ArrowRight, Mail, Lock, Leaf, Smartphone, MessageSquare, CheckCircle } from 'lucide-react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-
-// Define Zod Schemas
-const loginSchema = z.object({
-  method: z.enum(['password', 'phone']),
-  email: z.string().email({ message: "请输入有效的电子邮箱" }).optional().or(z.literal('')),
-  password: z.string().min(1, { message: "请输入密码" }).optional().or(z.literal('')),
-  phone: z.string().optional().or(z.literal('')),
-  code: z.string().optional().or(z.literal('')),
-}).superRefine((data, ctx) => {
-  if (data.method === 'password') {
-    if (!data.email) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "请输入电子邮箱", path: ['email'] });
-    }
-    if (!data.password) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "请输入密码", path: ['password'] });
-    }
-  } else {
-    if (!data.phone) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "请输入手机号码", path: ['phone'] });
-    } else if (!/^1[3-9]\d{9}$/.test(data.phone)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "手机号格式不正确", path: ['phone'] });
-    }
-    if (!data.code) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "请输入验证码", path: ['code'] });
-    }
-  }
-});
-
-type LoginFormInputs = z.infer<typeof loginSchema>;
 
 export const AuthPage: React.FC = () => {
   const navigate = useNavigate();
@@ -40,23 +8,13 @@ export const AuthPage: React.FC = () => {
   const [countdown, setCountdown] = useState(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const { register, handleSubmit, formState: { errors }, reset, trigger, getValues, setValue } = useForm<LoginFormInputs>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: {
-      method: 'password',
-      email: '',
-      password: '',
-      phone: '',
-      code: ''
-    }
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    phone: '',
+    code: ''
   });
-
-  // Keep form method state in sync
-  useEffect(() => {
-    setValue('method', loginMethod);
-    // Clear errors when switching methods
-    reset({ ...getValues(), method: loginMethod }, { keepValues: true }); 
-  }, [loginMethod, setValue, reset, getValues]);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -73,33 +31,58 @@ export const AuthPage: React.FC = () => {
     }
   }, [toastMessage]);
 
-  const handleSendCode = async () => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    // Clear error when user types
+    if (errors[name]) {
+        setErrors(prev => {
+            const next = { ...prev };
+            delete next[name];
+            return next;
+        });
+    }
+  };
+
+  const validate = () => {
+    const newErrors: Record<string, string> = {};
+    if (loginMethod === 'password') {
+        if (!formData.email) newErrors.email = "请输入电子邮箱";
+        else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = "请输入有效的电子邮箱";
+        
+        if (!formData.password) newErrors.password = "请输入密码";
+    } else {
+        if (!formData.phone) newErrors.phone = "请输入手机号码";
+        else if (!/^1[3-9]\d{9}$/.test(formData.phone)) newErrors.phone = "手机号格式不正确";
+        
+        if (!formData.code) newErrors.code = "请输入验证码";
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSendCode = () => {
     if (countdown > 0) return;
     
-    // Validate only phone field
-    const phone = getValues('phone');
-    if (!phone) {
-       // Manually trigger validation for phone only? 
-       // Simplest is to check manually or use trigger
-       const result = await trigger('phone'); // Trigger validation for schema, but schema depends on method
-       if (!result && errors.phone) return; // If schema failed and we have errors
+    if (!formData.phone) {
+        setErrors(prev => ({ ...prev, phone: "请输入手机号码" }));
+        return;
     }
-    
-    // Manual check because schema trigger might check everything
-    if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
-        // Force re-validation to show error
-        handleSubmit(() => {})(); 
+    if (!/^1[3-9]\d{9}$/.test(formData.phone)) {
+        setErrors(prev => ({ ...prev, phone: "手机号格式不正确" }));
         return;
     }
 
     setCountdown(60);
-    setToastMessage(`验证码已发送至 ${phone}`);
+    setToastMessage(`验证码已发送至 ${formData.phone}`);
   };
 
-  const onSubmit = (data: LoginFormInputs) => {
-    // console.log("Login Data:", data);
-    localStorage.setItem('isLoggedIn', 'true');
-    navigate('/performance');
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (validate()) {
+        localStorage.setItem('isLoggedIn', 'true');
+        navigate('/performance');
+    }
   };
 
   return (
@@ -116,7 +99,7 @@ export const AuthPage: React.FC = () => {
         </div>
       )}
 
-      {/* Left side image... (same as before) */}
+      {/* Left side image */}
       <div className="hidden lg:flex lg:w-1/2 relative bg-sky-500 h-full">
         <img 
           src="https://picsum.photos/seed/agritech/1200/1600" 
@@ -154,7 +137,8 @@ export const AuthPage: React.FC = () => {
                 
                 <div className="flex gap-8 border-b border-slate-100">
                     <button 
-                        onClick={() => setLoginMethod('password')}
+                        type="button"
+                        onClick={() => { setLoginMethod('password'); setErrors({}); }}
                         className={`pb-4 text-base font-bold transition-all border-b-2 ${
                             loginMethod === 'password' 
                             ? 'text-agri-600 border-agri-600' 
@@ -164,7 +148,8 @@ export const AuthPage: React.FC = () => {
                         密码登录
                     </button>
                     <button 
-                        onClick={() => setLoginMethod('phone')}
+                        type="button"
+                        onClick={() => { setLoginMethod('phone'); setErrors({}); }}
                         className={`pb-4 text-base font-bold transition-all border-b-2 ${
                             loginMethod === 'phone' 
                             ? 'text-agri-600 border-agri-600' 
@@ -176,7 +161,7 @@ export const AuthPage: React.FC = () => {
                 </div>
             </div>
 
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            <form onSubmit={onSubmit} className="space-y-6">
                 
                 {loginMethod === 'password' ? (
                     <>
@@ -186,7 +171,9 @@ export const AuthPage: React.FC = () => {
                                     <Mail size={22} />
                                 </div>
                                 <input 
-                                    {...register('email')}
+                                    name="email"
+                                    value={formData.email}
+                                    onChange={handleChange}
                                     type="email" 
                                     className={`w-full pl-14 pr-4 py-4 bg-slate-50 border rounded-2xl focus:ring-2 focus:bg-white focus:border-transparent outline-none transition-all font-medium text-slate-900 placeholder:text-slate-400 text-base ${
                                         errors.email 
@@ -196,7 +183,7 @@ export const AuthPage: React.FC = () => {
                                     placeholder="电子邮箱" 
                                 />
                             </div>
-                            {errors.email && <p className="text-red-500 text-sm mt-1.5 ml-1">{errors.email.message}</p>}
+                            {errors.email && <p className="text-red-500 text-sm mt-1.5 ml-1">{errors.email}</p>}
                         </div>
 
                         <div>
@@ -205,7 +192,9 @@ export const AuthPage: React.FC = () => {
                                     <Lock size={22} />
                                 </div>
                                 <input 
-                                    {...register('password')}
+                                    name="password"
+                                    value={formData.password}
+                                    onChange={handleChange}
                                     type="password" 
                                     className={`w-full pl-14 pr-4 py-4 bg-slate-50 border rounded-2xl focus:ring-2 focus:bg-white focus:border-transparent outline-none transition-all font-medium text-slate-900 placeholder:text-slate-400 text-base ${
                                         errors.password
@@ -215,7 +204,7 @@ export const AuthPage: React.FC = () => {
                                     placeholder="密码" 
                                 />
                             </div>
-                            {errors.password && <p className="text-red-500 text-sm mt-1.5 ml-1">{errors.password.message}</p>}
+                            {errors.password && <p className="text-red-500 text-sm mt-1.5 ml-1">{errors.password}</p>}
                         </div>
                     </>
                 ) : (
@@ -226,7 +215,9 @@ export const AuthPage: React.FC = () => {
                                     <Smartphone size={22} />
                                 </div>
                                 <input 
-                                    {...register('phone')}
+                                    name="phone"
+                                    value={formData.phone}
+                                    onChange={handleChange}
                                     type="tel" 
                                     maxLength={11}
                                     className={`w-full pl-14 pr-4 py-4 bg-slate-50 border rounded-2xl focus:ring-2 focus:bg-white focus:border-transparent outline-none transition-all font-medium text-slate-900 placeholder:text-slate-400 text-base ${
@@ -237,7 +228,7 @@ export const AuthPage: React.FC = () => {
                                     placeholder="手机号码" 
                                 />
                             </div>
-                            {errors.phone && <p className="text-red-500 text-sm mt-1.5 ml-1">{errors.phone.message}</p>}
+                            {errors.phone && <p className="text-red-500 text-sm mt-1.5 ml-1">{errors.phone}</p>}
                         </div>
 
                         <div>
@@ -247,7 +238,9 @@ export const AuthPage: React.FC = () => {
                                         <MessageSquare size={22} />
                                     </div>
                                     <input 
-                                        {...register('code')}
+                                        name="code"
+                                        value={formData.code}
+                                        onChange={handleChange}
                                         type="text" 
                                         className={`w-full pl-14 pr-4 py-4 bg-slate-50 border rounded-2xl focus:ring-2 focus:bg-white focus:border-transparent outline-none transition-all font-medium text-slate-900 placeholder:text-slate-400 text-base ${
                                             errors.code
@@ -270,7 +263,7 @@ export const AuthPage: React.FC = () => {
                                     {countdown > 0 ? `${countdown}s` : '获取'}
                                 </button>
                             </div>
-                            {errors.code && <p className="text-red-500 text-sm mt-1.5 ml-1">{errors.code.message}</p>}
+                            {errors.code && <p className="text-red-500 text-sm mt-1.5 ml-1">{errors.code}</p>}
                         </div>
                     </>
                 )}
@@ -289,7 +282,6 @@ export const AuthPage: React.FC = () => {
                 </button>
             </form>
 
-            {/* Social Login Section */}
             <div className="mt-12 pt-8 border-t border-slate-100 text-center">
                 <p className="text-slate-400 text-sm mb-6">或者使用以下方式继续</p>
                 <div className="flex justify-center gap-6">
