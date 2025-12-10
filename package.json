@@ -15,7 +15,12 @@
     "framer-motion": "^11.0.8",
     "react-router-dom": "^6.22.3",
     "@google/genai": "^1.30.0",
-    "lucide-react": "^0.554.0"
+    "lucide-react": "^0.554.0",
+    "html2canvas": "1.4.1",
+    "jspdf": "2.5.1",
+    "react-hook-form": "7.51.0",
+    "zod": "3.22.4",
+    "@hookform/resolvers": "^5.2.2"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

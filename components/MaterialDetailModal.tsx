@@ -1,6 +1,8 @@
-import React from 'react';
-import { X, Share2, Copy, Zap, Droplets, ArrowRight, Download, Printer } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { X, Share2, Zap, Droplets, Download, FileText, Loader2 } from 'lucide-react';
 import { Material } from '../types';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 const PROPERTY_ORDER: Record<string, string[]> = {
     'Steel_Chem': ['C', 'Si', 'Mn', 'P', 'S', 'Cr', 'Ni', 'Mo', 'V', 'Cu', 'Fe'],
@@ -15,6 +17,9 @@ interface MaterialDetailModalProps {
 }
 
 export const MaterialDetailModal: React.FC<MaterialDetailModalProps> = ({ material, onClose }) => {
+  // Ref for the entire report card to capture everything including header
+  const reportRef = useRef<HTMLDivElement>(null);
+  const [isExporting, setIsExporting] = useState(false);
   
   const copyLink = () => {
     const url = window.location.href;
@@ -22,8 +27,146 @@ export const MaterialDetailModal: React.FC<MaterialDetailModalProps> = ({ materi
     alert("链接已复制");
   };
 
-  const handlePrint = () => {
-    window.print();
+  const handleExportPDF = async () => {
+    if (!reportRef.current) return;
+    
+    setIsExporting(true);
+    
+    // 1. Create Clone
+    const original = reportRef.current;
+    const clone = original.cloneNode(true) as HTMLElement;
+    
+    // 2. Setup Clone Environment (A4 Width)
+    const A4_WIDTH_PX = 794; // approx 210mm @ 96dpi
+    
+    const wrapper = document.createElement('div');
+    wrapper.style.position = 'absolute';
+    wrapper.style.top = '-10000px';
+    wrapper.style.left = '0';
+    wrapper.style.width = `${A4_WIDTH_PX}px`;
+    wrapper.style.zIndex = '-1'; // Ensure it's behind everything
+    wrapper.style.backgroundColor = '#ffffff';
+    wrapper.appendChild(clone);
+    document.body.appendChild(wrapper);
+
+    try {
+        // 3. Clean up the Clone Styles for Printing
+        
+        // Reset container constraints to allow full expansion
+        clone.style.height = 'auto';
+        clone.style.maxHeight = 'none';
+        clone.style.overflow = 'visible';
+        clone.style.width = '100%';
+        clone.style.borderRadius = '0';
+        clone.style.boxShadow = 'none';
+        clone.style.border = 'none';
+
+        // Expand scrollable content
+        const scrollableContent = clone.querySelector('.custom-scrollbar');
+        if (scrollableContent) {
+            (scrollableContent as HTMLElement).style.overflow = 'visible';
+            (scrollableContent as HTMLElement).style.height = 'auto';
+        }
+
+        // Remove Truncation
+        const truncated = clone.querySelectorAll('.truncate');
+        truncated.forEach(el => {
+            el.classList.remove('truncate');
+            el.classList.add('whitespace-normal', 'break-words');
+        });
+
+        // Fix Quick Specs Bar layout
+        const specsItems = clone.querySelectorAll('.min-w-\\[160px\\]');
+        specsItems.forEach(el => {
+            el.classList.remove('min-w-[160px]');
+            (el as HTMLElement).style.minWidth = '0'; 
+            (el as HTMLElement).style.flex = '1 1 auto';
+        });
+
+        // --- SPECIFIC FIXES FOR "NOT IN BOX" ISSUES ---
+        // Remove borders from specific tags to avoid visual overflow glitches
+        
+        // 1. Technical Data Sheet badge
+        const techBadge = clone.querySelector('span.text-xs.font-bold.uppercase.tracking-widest');
+        if (techBadge) {
+            techBadge.classList.remove('border', 'border-slate-300');
+            // Add a simple background instead if needed, or just keep text
+            // (techBadge as HTMLElement).style.border = 'none';
+        }
+
+        // 2. Applications tags
+        // Identify them by the class we used: bg-slate-100
+        const appTags = clone.querySelectorAll('.bg-slate-100.border.border-slate-200');
+        appTags.forEach(tag => {
+           tag.classList.remove('border', 'border-slate-200');
+           (tag as HTMLElement).style.whiteSpace = 'normal'; // Allow wrapping text inside tag
+           (tag as HTMLElement).style.display = 'inline-block';
+           (tag as HTMLElement).style.height = 'auto';
+        });
+
+        // Hide Action Buttons
+        const actionButtons = clone.querySelector('.print\\:hidden'); 
+        if (actionButtons) {
+            (actionButtons as HTMLElement).style.display = 'none';
+        }
+        
+        // Hide Close Button
+        const closeBtn = clone.querySelector('button[title="Close"]'); 
+        if (closeBtn) (closeBtn as HTMLElement).style.display = 'none';
+
+        // 4. Capture High-Res Image
+        // Important: Set height/windowHeight to ensure full capture
+        const cloneHeight = clone.scrollHeight;
+        
+        const canvas = await html2canvas(clone, {
+            scale: 2, 
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#ffffff',
+            width: A4_WIDTH_PX,
+            windowWidth: A4_WIDTH_PX,
+            height: cloneHeight,
+            windowHeight: cloneHeight
+        });
+
+        // 5. Generate PDF
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const pdfWidth = 210;
+        const pdfHeight = 297;
+        const margin = 10;
+        const contentWidth = pdfWidth - (margin * 2);
+        const contentHeight = pdfHeight - (margin * 2);
+        
+        const imgProps = pdf.getImageProperties(imgData);
+        const imgHeight = (imgProps.height * contentWidth) / imgProps.width;
+        
+        let heightLeft = imgHeight;
+        let position = margin;
+        
+        // First Page
+        pdf.addImage(imgData, 'JPEG', margin, position, contentWidth, imgHeight);
+        heightLeft -= contentHeight;
+        
+        // Subsequent Pages
+        while (heightLeft > 0) {
+            position -= contentHeight; // Move image up by the height of one page's content
+            pdf.addPage();
+            pdf.addImage(imgData, 'JPEG', margin, position, contentWidth, imgHeight);
+            heightLeft -= contentHeight;
+        }
+
+        pdf.save(`${material.name}_${material.grade}_Report.pdf`);
+
+    } catch (err) {
+        console.error('PDF Export Error:', err);
+        alert('导出 PDF 失败，请检查网络或重试');
+    } finally {
+        if (document.body.contains(wrapper)) {
+            document.body.removeChild(wrapper);
+        }
+        setIsExporting(false);
+    }
   };
 
   const handleExportCSV = () => {
@@ -57,8 +200,9 @@ export const MaterialDetailModal: React.FC<MaterialDetailModalProps> = ({ materi
     if (material.wearResistance) csvContent += `Performance,Wear Resistance,"${material.wearResistance}"\n`;
     if (material.corrosionResistance) csvContent += `Performance,Corrosion Resistance,"${material.corrosionResistance}"\n`;
 
-    // 2. Create Download Link
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    // 2. Create Download Link with BOM
+    const bom = '\uFEFF'; 
+    const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
@@ -95,7 +239,8 @@ export const MaterialDetailModal: React.FC<MaterialDetailModalProps> = ({ materi
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in print:bg-white print:p-0 print:absolute">
-      <div className="bg-white rounded-lg shadow-2xl w-full max-w-5xl max-h-[95vh] flex flex-col overflow-hidden ring-1 ring-slate-900/5 print:shadow-none print:max-w-none print:max-h-none print:h-auto print:rounded-none print:ring-0">
+      {/* Attached Ref to the card container to capture Header + Content */}
+      <div ref={reportRef} className="bg-white rounded-lg shadow-2xl w-full max-w-5xl max-h-[95vh] flex flex-col overflow-hidden ring-1 ring-slate-900/5 print:shadow-none print:max-w-none print:max-h-none print:h-auto print:rounded-none print:ring-0">
          
          {/* Technical Sheet Header */}
          <div className="bg-slate-50 border-b border-slate-200 px-8 py-5 flex justify-between items-start shrink-0 print:bg-white print:border-b-2 print:border-slate-800">
@@ -111,19 +256,22 @@ export const MaterialDetailModal: React.FC<MaterialDetailModalProps> = ({ materi
                     <span className="text-2xl font-mono text-agri-600 font-bold bg-agri-50 px-2 rounded-md print:bg-transparent print:text-slate-800 print:border print:border-slate-800">{material.grade}</span>
                 </div>
             </div>
+            
+            {/* Buttons Area - Hidden in Print/PDF via class or clone manipulation */}
             <div className="flex gap-2 print:hidden">
+                <button onClick={handleExportPDF} disabled={isExporting} className="flex items-center gap-2 px-3 py-2.5 text-sm font-bold text-white bg-agri-600 hover:bg-agri-500 rounded-lg transition shadow-sm disabled:opacity-70 disabled:cursor-not-allowed" title="Export PDF">
+                    {isExporting ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
+                    <span className="hidden sm:inline">导出 PDF</span>
+                </button>
                 <button onClick={handleExportCSV} className="flex items-center gap-2 px-3 py-2.5 text-sm font-bold text-slate-600 bg-white border border-slate-200 hover:border-agri-500 hover:text-agri-600 rounded-lg transition" title="Export CSV">
                     <Download size={18} />
-                    <span className="hidden sm:inline">导出数据</span>
-                </button>
-                <button onClick={handlePrint} className="p-2.5 text-slate-500 hover:text-agri-600 hover:bg-white rounded-lg transition border border-transparent hover:border-slate-200" title="Print / Save PDF">
-                    <Printer size={20} />
+                    <span className="hidden sm:inline">CSV</span>
                 </button>
                 <div className="w-px bg-slate-200 mx-1"></div>
                 <button onClick={copyLink} className="p-2.5 text-slate-500 hover:text-agri-600 hover:bg-white rounded-lg transition border border-transparent hover:border-slate-200" title="Copy Link">
                     <Share2 size={20} />
                 </button>
-                <button onClick={onClose} className="p-2.5 text-slate-500 hover:text-red-600 hover:bg-white rounded-lg transition border border-transparent hover:border-slate-200">
+                <button onClick={onClose} className="p-2.5 text-slate-500 hover:text-red-600 hover:bg-white rounded-lg transition border border-transparent hover:border-slate-200" title="Close">
                     <X size={24} />
                 </button>
             </div>
@@ -143,6 +291,7 @@ export const MaterialDetailModal: React.FC<MaterialDetailModalProps> = ({ materi
                 ].map((item, i) => (
                     <div key={i} className="bg-slate-50 px-5 py-3 flex-1 min-w-[160px] print:bg-white print:border print:border-slate-200 print:p-2 print:min-w-0">
                         <div className="text-xs text-slate-500 uppercase font-bold mb-1 tracking-wide">{item.label}</div>
+                        {/* Note: 'truncate' is removed in PDF generation clone */}
                         <div className="text-slate-900 font-bold text-base truncate">{item.value || '-'}</div>
                     </div>
                 ))}

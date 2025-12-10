@@ -1,8 +1,7 @@
-
 import React, { useState } from 'react';
 import { CASES } from '../constants';
 import { CaseStudy } from '../types';
-import { Calendar, ArrowUpRight, X, Tag, Share2, Clock } from 'lucide-react';
+import { Calendar, ArrowUpRight, X, Tag, Clock } from 'lucide-react';
 
 export const CaseStudiesPage: React.FC = () => {
   const [selectedCase, setSelectedCase] = useState<CaseStudy | null>(null);
@@ -51,21 +50,14 @@ export const CaseStudiesPage: React.FC = () => {
            <div className="relative bg-white w-full h-full max-w-5xl mx-auto rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-fade-in">
               
               {/* Header / Toolbar */}
-              <div className="absolute top-0 left-0 right-0 z-20 flex justify-between items-center p-4 pointer-events-none">
-                 {/* Back/Close Button */}
+              <div className="absolute top-0 left-0 right-0 z-20 flex justify-end items-center p-4 pointer-events-none">
+                 {/* Close Button moved to right */}
                  <button 
                    onClick={() => setSelectedCase(null)}
-                   className="pointer-events-auto p-2 bg-white/20 hover:bg-white text-white rounded-full backdrop-blur-md transition shadow-lg"
+                   className="pointer-events-auto p-2 bg-white/20 hover:bg-white text-white rounded-full backdrop-blur-md transition shadow-lg hover:text-slate-900"
                  >
                    <X size={24} />
                  </button>
-                 
-                 {/* Actions */}
-                 <div className="pointer-events-auto flex gap-2">
-                    <button className="p-2 bg-white/20 hover:bg-white text-white rounded-full backdrop-blur-md transition shadow-lg" title="分享">
-                       <Share2 size={20} />
-                    </button>
-                 </div>
               </div>
 
               {/* Content Container - Scrollable */}

@@ -1,29 +1,33 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { ArrowRight, Mail, Lock, User, Leaf, Smartphone, MessageSquare, CheckCircle } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+
+// Zod Schema for Registration
+const registerSchema = z.object({
+  username: z.string().min(2, { message: "用户名至少2个字符" }),
+  email: z.string().email({ message: "请输入有效的电子邮箱" }),
+  phone: z.string().regex(/^1[3-9]\d{9}$/, { message: "请输入有效的11位手机号码" }),
+  code: z.string().min(4, { message: "请输入验证码" }),
+  password: z.string().min(6, { message: "密码至少6位" }),
+  confirmPassword: z.string().min(6, { message: "请确认密码" })
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "两次输入的密码不一致",
+  path: ["confirmPassword"],
+});
+
+type RegisterFormInputs = z.infer<typeof registerSchema>;
 
 export const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
-  
-  // Form State
-  const [formData, setFormData] = useState({
-    username: '',
-    email: '',
-    phone: '',
-    code: '',
-    password: '',
-    confirmPassword: ''
-  });
-
-  // Error State
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  // Countdown State
   const [countdown, setCountdown] = useState(0);
-
-  // Toast State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const { register, handleSubmit, formState: { errors }, trigger, getValues } = useForm<RegisterFormInputs>({
+    resolver: zodResolver(registerSchema)
+  });
 
   // Timer Effect
   useEffect(() => {
@@ -42,79 +46,21 @@ export const RegisterPage: React.FC = () => {
     }
   }, [toastMessage]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    // Clear specific error
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
-    }
-  };
-
-  const validatePhone = (): boolean => {
-    const { phone } = formData;
-    if (!phone) {
-      setErrors(prev => ({ ...prev, phone: "请输入手机号码" }));
-      return false;
-    }
-    const phoneRegex = /^1[3-9]\d{9}$/;
-    if (!phoneRegex.test(phone)) {
-      setErrors(prev => ({ ...prev, phone: "请输入有效的11位手机号码" }));
-      return false;
-    }
-    return true;
-  };
-
-  const handleSendCode = () => {
-    if (countdown > 0) return; // Prevent clicking if already counting down
+  const handleSendCode = async () => {
+    if (countdown > 0) return;
     
-    // Validate phone before sending
-    if (!validatePhone()) return;
-
-    // Start Countdown
-    setCountdown(60);
-
-    // Show custom toast instead of alert
-    setToastMessage(`验证码已发送至 ${formData.phone}`);
-  };
-
-  const handleRegister = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    const newErrors: Record<string, string> = {};
-    let isValid = true;
-
-    if (!formData.username) { newErrors.username = "请输入用户名"; isValid = false; }
-    if (!formData.email) { newErrors.email = "请输入电子邮箱"; isValid = false; }
-    
-    // Validate Phone
-    if (!formData.phone) { 
-        newErrors.phone = "请输入手机号码"; 
-        isValid = false; 
-    } else if (!/^1[3-9]\d{9}$/.test(formData.phone)) {
-        newErrors.phone = "请输入有效的手机号码";
-        isValid = false;
-    }
-
-    if (!formData.code) { newErrors.code = "请输入验证码"; isValid = false; }
-    if (!formData.password) { newErrors.password = "请输入密码"; isValid = false; }
-    
-    if (!formData.confirmPassword) { 
-        newErrors.confirmPassword = "请确认密码"; 
-        isValid = false; 
-    } else if (formData.password !== formData.confirmPassword) {
-        newErrors.confirmPassword = "两次输入的密码不一致";
-        isValid = false;
-    }
-
-    setErrors(newErrors);
-
+    // Validate Phone field only
+    const isValid = await trigger('phone');
     if (!isValid) return;
 
-    // Simulation of registration
+    const phone = getValues('phone');
+    
+    setCountdown(60);
+    setToastMessage(`验证码已发送至 ${phone}`);
+  };
+
+  const onSubmit = (data: RegisterFormInputs) => {
+    // console.log("Register Data:", data);
     alert("注册成功！请登录");
     navigate('/auth');
   };
@@ -122,7 +68,6 @@ export const RegisterPage: React.FC = () => {
   return (
     <div className="flex w-full h-screen overflow-hidden bg-white relative">
       
-      {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[100] animate-fade-in">
            <div className="bg-white px-6 py-4 rounded-xl shadow-2xl border border-agri-100 flex flex-col items-center gap-3 min-w-[200px]">
@@ -134,7 +79,7 @@ export const RegisterPage: React.FC = () => {
         </div>
       )}
 
-      {/* Left Side - Image Background (Updated to Match AuthPage) */}
+      {/* Left Side */}
       <div className="hidden lg:flex lg:w-1/2 relative bg-sky-500 h-full">
         <img 
           src="https://picsum.photos/seed/agritech_reg/1200/1600" 
@@ -155,11 +100,6 @@ export const RegisterPage: React.FC = () => {
                 注册 AgriMat Digital 账户，获取完整的材料数据访问权限与AI性能评估服务。
               </p>
            </div>
-           <div className="flex gap-2">
-              <div className="h-1.5 w-12 bg-white rounded-full"></div>
-              <div className="h-1.5 w-3 bg-white/50 rounded-full"></div>
-              <div className="h-1.5 w-3 bg-white/50 rounded-full"></div>
-           </div>
         </div>
       </div>
 
@@ -168,7 +108,6 @@ export const RegisterPage: React.FC = () => {
         <div className="min-h-full flex flex-col items-center justify-center p-8 lg:p-12 pt-24 lg:pt-20">
             <div className="w-full max-w-md">
             
-            {/* Mobile Header */}
             <div className="lg:hidden mb-10 text-center">
                 <h1 className="text-3xl font-bold text-slate-900">AgriMat Digital</h1>
                 <p className="text-slate-500 text-sm mt-2">新用户注册</p>
@@ -179,7 +118,7 @@ export const RegisterPage: React.FC = () => {
                 <p className="text-slate-500">填写以下信息加入我们的平台。</p>
             </div>
 
-            <form onSubmit={handleRegister} className="space-y-5">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
                 
                 <div>
                     <div className={`relative group animate-fade-in ${errors.username ? 'text-red-500' : ''}`}>
@@ -187,10 +126,8 @@ export const RegisterPage: React.FC = () => {
                             <User size={20} />
                         </div>
                         <input 
+                            {...register('username')}
                             type="text" 
-                            name="username"
-                            value={formData.username}
-                            onChange={handleInputChange}
                             className={`w-full pl-12 pr-4 py-3.5 bg-slate-50 border rounded-xl focus:ring-2 focus:bg-white focus:border-transparent outline-none transition-all font-medium text-slate-900 placeholder:text-slate-400 ${
                                 errors.username 
                                 ? 'border-red-300 focus:ring-red-200' 
@@ -199,7 +136,7 @@ export const RegisterPage: React.FC = () => {
                             placeholder="用户名" 
                         />
                     </div>
-                    {errors.username && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.username}</p>}
+                    {errors.username && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.username.message}</p>}
                 </div>
                 
                 <div>
@@ -208,10 +145,8 @@ export const RegisterPage: React.FC = () => {
                             <Mail size={20} />
                         </div>
                         <input 
+                            {...register('email')}
                             type="email" 
-                            name="email"
-                            value={formData.email}
-                            onChange={handleInputChange}
                             className={`w-full pl-12 pr-4 py-3.5 bg-slate-50 border rounded-xl focus:ring-2 focus:bg-white focus:border-transparent outline-none transition-all font-medium text-slate-900 placeholder:text-slate-400 ${
                                 errors.email 
                                 ? 'border-red-300 focus:ring-red-200' 
@@ -220,7 +155,7 @@ export const RegisterPage: React.FC = () => {
                             placeholder="电子邮箱" 
                         />
                     </div>
-                    {errors.email && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.email}</p>}
+                    {errors.email && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.email.message}</p>}
                 </div>
 
                 <div>
@@ -229,20 +164,18 @@ export const RegisterPage: React.FC = () => {
                             <Smartphone size={20} />
                         </div>
                         <input 
+                            {...register('phone')}
                             type="tel" 
-                            name="phone"
-                            value={formData.phone}
-                            onChange={handleInputChange}
+                            maxLength={11}
                             className={`w-full pl-12 pr-4 py-3.5 bg-slate-50 border rounded-xl focus:ring-2 focus:bg-white focus:border-transparent outline-none transition-all font-medium text-slate-900 placeholder:text-slate-400 ${
                                 errors.phone 
                                 ? 'border-red-300 focus:ring-red-200' 
                                 : 'border-slate-200 focus:ring-agri-500'
                             }`}
                             placeholder="手机号码" 
-                            maxLength={11}
                         />
                     </div>
-                    {errors.phone && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.phone}</p>}
+                    {errors.phone && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.phone.message}</p>}
                 </div>
 
                 <div>
@@ -252,10 +185,8 @@ export const RegisterPage: React.FC = () => {
                                 <MessageSquare size={20} />
                             </div>
                             <input 
+                                {...register('code')}
                                 type="text" 
-                                name="code"
-                                value={formData.code}
-                                onChange={handleInputChange}
                                 className={`w-full pl-12 pr-4 py-3.5 bg-slate-50 border rounded-xl focus:ring-2 focus:bg-white focus:border-transparent outline-none transition-all font-medium text-slate-900 placeholder:text-slate-400 ${
                                     errors.code 
                                     ? 'border-red-300 focus:ring-red-200' 
@@ -277,7 +208,7 @@ export const RegisterPage: React.FC = () => {
                             {countdown > 0 ? `${countdown}s` : '获取验证码'}
                         </button>
                     </div>
-                    {errors.code && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.code}</p>}
+                    {errors.code && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.code.message}</p>}
                 </div>
 
                 <div>
@@ -286,10 +217,8 @@ export const RegisterPage: React.FC = () => {
                             <Lock size={20} />
                         </div>
                         <input 
+                            {...register('password')}
                             type="password" 
-                            name="password"
-                            value={formData.password}
-                            onChange={handleInputChange}
                             className={`w-full pl-12 pr-4 py-3.5 bg-slate-50 border rounded-xl focus:ring-2 focus:bg-white focus:border-transparent outline-none transition-all font-medium text-slate-900 placeholder:text-slate-400 ${
                                 errors.password 
                                 ? 'border-red-300 focus:ring-red-200' 
@@ -298,7 +227,7 @@ export const RegisterPage: React.FC = () => {
                             placeholder="密码" 
                         />
                     </div>
-                    {errors.password && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.password}</p>}
+                    {errors.password && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.password.message}</p>}
                 </div>
 
                 <div>
@@ -307,10 +236,8 @@ export const RegisterPage: React.FC = () => {
                             <Lock size={20} />
                         </div>
                         <input 
+                            {...register('confirmPassword')}
                             type="password" 
-                            name="confirmPassword"
-                            value={formData.confirmPassword}
-                            onChange={handleInputChange}
                             className={`w-full pl-12 pr-4 py-3.5 bg-slate-50 border rounded-xl focus:ring-2 focus:bg-white focus:border-transparent outline-none transition-all font-medium text-slate-900 placeholder:text-slate-400 ${
                                 errors.confirmPassword 
                                 ? 'border-red-300 focus:ring-red-200' 
@@ -319,7 +246,7 @@ export const RegisterPage: React.FC = () => {
                             placeholder="确认密码" 
                         />
                     </div>
-                    {errors.confirmPassword && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.confirmPassword}</p>}
+                    {errors.confirmPassword && <p className="text-red-500 text-xs mt-1.5 ml-1">{errors.confirmPassword.message}</p>}
                 </div>
                 
                 <button 
@@ -339,7 +266,6 @@ export const RegisterPage: React.FC = () => {
 
             </div>
             
-            {/* Footer info - Static relative to content */}
             <div className="mt-8 text-center w-full">
                 <p className="text-xs text-slate-400">© 2024 AgriMat Digital. All rights reserved.</p>
             </div>

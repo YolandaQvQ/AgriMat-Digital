@@ -1,23 +1,62 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { ArrowRight, Mail, Lock, Leaf, Smartphone, MessageSquare, CheckCircle } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 
-type LoginMethod = 'password' | 'phone';
+// Define Zod Schemas
+const loginSchema = z.object({
+  method: z.enum(['password', 'phone']),
+  email: z.string().email({ message: "请输入有效的电子邮箱" }).optional().or(z.literal('')),
+  password: z.string().min(1, { message: "请输入密码" }).optional().or(z.literal('')),
+  phone: z.string().optional().or(z.literal('')),
+  code: z.string().optional().or(z.literal('')),
+}).superRefine((data, ctx) => {
+  if (data.method === 'password') {
+    if (!data.email) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "请输入电子邮箱", path: ['email'] });
+    }
+    if (!data.password) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "请输入密码", path: ['password'] });
+    }
+  } else {
+    if (!data.phone) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "请输入手机号码", path: ['phone'] });
+    } else if (!/^1[3-9]\d{9}$/.test(data.phone)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "手机号格式不正确", path: ['phone'] });
+    }
+    if (!data.code) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "请输入验证码", path: ['code'] });
+    }
+  }
+});
+
+type LoginFormInputs = z.infer<typeof loginSchema>;
 
 export const AuthPage: React.FC = () => {
   const navigate = useNavigate();
-  const [loginMethod, setLoginMethod] = useState<LoginMethod>('password');
-  
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    phone: '',
-    code: ''
-  });
-
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loginMethod, setLoginMethod] = useState<'password' | 'phone'>('password');
   const [countdown, setCountdown] = useState(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const { register, handleSubmit, formState: { errors }, reset, trigger, getValues, setValue } = useForm<LoginFormInputs>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      method: 'password',
+      email: '',
+      password: '',
+      phone: '',
+      code: ''
+    }
+  });
+
+  // Keep form method state in sync
+  useEffect(() => {
+    setValue('method', loginMethod);
+    // Clear errors when switching methods
+    reset({ ...getValues(), method: loginMethod }, { keepValues: true }); 
+  }, [loginMethod, setValue, reset, getValues]);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -34,81 +73,33 @@ export const AuthPage: React.FC = () => {
     }
   }, [toastMessage]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
-    }
-  };
-
-  const validatePhone = (): boolean => {
-    const { phone } = formData;
-    if (!phone) {
-      setErrors(prev => ({ ...prev, phone: "请输入手机号码" }));
-      return false;
-    }
-    const phoneRegex = /^1[3-9]\d{9}$/;
-    if (!phoneRegex.test(phone)) {
-      setErrors(prev => ({ ...prev, phone: "请输入有效的11位手机号码" }));
-      return false;
-    }
-    return true;
-  };
-
-  const handleSendCode = () => {
-    if (countdown > 0) return; 
-    if (!validatePhone()) return;
-    setCountdown(60);
-    setToastMessage(`验证码已发送至 ${formData.phone}`);
-  };
-
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendCode = async () => {
+    if (countdown > 0) return;
     
-    const newErrors: Record<string, string> = {};
-    let isValid = true;
-
-    if (loginMethod === 'password') {
-       if (!formData.email) {
-         newErrors.email = "请输入电子邮箱";
-         isValid = false;
-       }
-       if (!formData.password) {
-         newErrors.password = "请输入密码";
-         isValid = false;
-       }
-    } else {
-       if (!formData.phone) {
-         newErrors.phone = "请输入手机号码";
-         isValid = false;
-       } else {
-          const phoneRegex = /^1[3-9]\d{9}$/;
-          if (!phoneRegex.test(formData.phone)) {
-            newErrors.phone = "手机号格式不正确";
-            isValid = false;
-          }
-       }
-
-       if (!formData.code) {
-         newErrors.code = "请输入验证码";
-         isValid = false;
-       }
+    // Validate only phone field
+    const phone = getValues('phone');
+    if (!phone) {
+       // Manually trigger validation for phone only? 
+       // Simplest is to check manually or use trigger
+       const result = await trigger('phone'); // Trigger validation for schema, but schema depends on method
+       if (!result && errors.phone) return; // If schema failed and we have errors
+    }
+    
+    // Manual check because schema trigger might check everything
+    if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
+        // Force re-validation to show error
+        handleSubmit(() => {})(); 
+        return;
     }
 
-    setErrors(newErrors);
-    if (!isValid) return;
+    setCountdown(60);
+    setToastMessage(`验证码已发送至 ${phone}`);
+  };
 
+  const onSubmit = (data: LoginFormInputs) => {
+    // console.log("Login Data:", data);
     localStorage.setItem('isLoggedIn', 'true');
     navigate('/performance');
-  };
-
-  const toggleMethod = (method: LoginMethod) => {
-      setLoginMethod(method);
-      setErrors({}); 
   };
 
   return (
@@ -125,6 +116,7 @@ export const AuthPage: React.FC = () => {
         </div>
       )}
 
+      {/* Left side image... (same as before) */}
       <div className="hidden lg:flex lg:w-1/2 relative bg-sky-500 h-full">
         <img 
           src="https://picsum.photos/seed/agritech/1200/1600" 
@@ -132,7 +124,6 @@ export const AuthPage: React.FC = () => {
           className="absolute inset-0 w-full h-full object-cover opacity-20 mix-blend-multiply"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-sky-600 via-agri-500 to-sky-300 opacity-90"></div>
-        
         <div className="relative z-10 w-full h-full flex flex-col justify-end p-16 text-white">
            <div className="mb-8">
               <div className="inline-flex items-center px-4 py-1.5 rounded-full bg-white/20 text-white border border-white/30 text-sm font-bold mb-6 backdrop-blur-md">
@@ -144,11 +135,6 @@ export const AuthPage: React.FC = () => {
               <p className="text-2xl text-sky-50 max-w-lg leading-relaxed font-light">
                 构建下一代农机装备材料数字化生态系统，连接数据、仿真与性能评价。
               </p>
-           </div>
-           <div className="flex gap-2">
-              <div className="h-1.5 w-12 bg-white rounded-full"></div>
-              <div className="h-1.5 w-3 bg-white/50 rounded-full"></div>
-              <div className="h-1.5 w-3 bg-white/50 rounded-full"></div>
            </div>
         </div>
       </div>
@@ -168,7 +154,7 @@ export const AuthPage: React.FC = () => {
                 
                 <div className="flex gap-8 border-b border-slate-100">
                     <button 
-                        onClick={() => toggleMethod('password')}
+                        onClick={() => setLoginMethod('password')}
                         className={`pb-4 text-base font-bold transition-all border-b-2 ${
                             loginMethod === 'password' 
                             ? 'text-agri-600 border-agri-600' 
@@ -178,7 +164,7 @@ export const AuthPage: React.FC = () => {
                         密码登录
                     </button>
                     <button 
-                        onClick={() => toggleMethod('phone')}
+                        onClick={() => setLoginMethod('phone')}
                         className={`pb-4 text-base font-bold transition-all border-b-2 ${
                             loginMethod === 'phone' 
                             ? 'text-agri-600 border-agri-600' 
@@ -190,7 +176,7 @@ export const AuthPage: React.FC = () => {
                 </div>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-6">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                 
                 {loginMethod === 'password' ? (
                     <>
@@ -200,10 +186,8 @@ export const AuthPage: React.FC = () => {
                                     <Mail size={22} />
                                 </div>
                                 <input 
+                                    {...register('email')}
                                     type="email" 
-                                    name="email"
-                                    value={formData.email}
-                                    onChange={handleInputChange}
                                     className={`w-full pl-14 pr-4 py-4 bg-slate-50 border rounded-2xl focus:ring-2 focus:bg-white focus:border-transparent outline-none transition-all font-medium text-slate-900 placeholder:text-slate-400 text-base ${
                                         errors.email 
                                         ? 'border-red-300 focus:ring-red-200' 
@@ -212,7 +196,7 @@ export const AuthPage: React.FC = () => {
                                     placeholder="电子邮箱" 
                                 />
                             </div>
-                            {errors.email && <p className="text-red-500 text-sm mt-1.5 ml-1">{errors.email}</p>}
+                            {errors.email && <p className="text-red-500 text-sm mt-1.5 ml-1">{errors.email.message}</p>}
                         </div>
 
                         <div>
@@ -221,10 +205,8 @@ export const AuthPage: React.FC = () => {
                                     <Lock size={22} />
                                 </div>
                                 <input 
+                                    {...register('password')}
                                     type="password" 
-                                    name="password"
-                                    value={formData.password}
-                                    onChange={handleInputChange}
                                     className={`w-full pl-14 pr-4 py-4 bg-slate-50 border rounded-2xl focus:ring-2 focus:bg-white focus:border-transparent outline-none transition-all font-medium text-slate-900 placeholder:text-slate-400 text-base ${
                                         errors.password
                                         ? 'border-red-300 focus:ring-red-200' 
@@ -233,7 +215,7 @@ export const AuthPage: React.FC = () => {
                                     placeholder="密码" 
                                 />
                             </div>
-                            {errors.password && <p className="text-red-500 text-sm mt-1.5 ml-1">{errors.password}</p>}
+                            {errors.password && <p className="text-red-500 text-sm mt-1.5 ml-1">{errors.password.message}</p>}
                         </div>
                     </>
                 ) : (
@@ -244,20 +226,18 @@ export const AuthPage: React.FC = () => {
                                     <Smartphone size={22} />
                                 </div>
                                 <input 
+                                    {...register('phone')}
                                     type="tel" 
-                                    name="phone"
-                                    value={formData.phone}
-                                    onChange={handleInputChange}
+                                    maxLength={11}
                                     className={`w-full pl-14 pr-4 py-4 bg-slate-50 border rounded-2xl focus:ring-2 focus:bg-white focus:border-transparent outline-none transition-all font-medium text-slate-900 placeholder:text-slate-400 text-base ${
                                         errors.phone
                                         ? 'border-red-300 focus:ring-red-200' 
                                         : 'border-slate-200 focus:ring-agri-500'
                                     }`} 
                                     placeholder="手机号码" 
-                                    maxLength={11}
                                 />
                             </div>
-                            {errors.phone && <p className="text-red-500 text-sm mt-1.5 ml-1">{errors.phone}</p>}
+                            {errors.phone && <p className="text-red-500 text-sm mt-1.5 ml-1">{errors.phone.message}</p>}
                         </div>
 
                         <div>
@@ -267,10 +247,8 @@ export const AuthPage: React.FC = () => {
                                         <MessageSquare size={22} />
                                     </div>
                                     <input 
+                                        {...register('code')}
                                         type="text" 
-                                        name="code"
-                                        value={formData.code}
-                                        onChange={handleInputChange}
                                         className={`w-full pl-14 pr-4 py-4 bg-slate-50 border rounded-2xl focus:ring-2 focus:bg-white focus:border-transparent outline-none transition-all font-medium text-slate-900 placeholder:text-slate-400 text-base ${
                                             errors.code
                                             ? 'border-red-300 focus:ring-red-200' 
@@ -292,7 +270,7 @@ export const AuthPage: React.FC = () => {
                                     {countdown > 0 ? `${countdown}s` : '获取'}
                                 </button>
                             </div>
-                            {errors.code && <p className="text-red-500 text-sm mt-1.5 ml-1">{errors.code}</p>}
+                            {errors.code && <p className="text-red-500 text-sm mt-1.5 ml-1">{errors.code.message}</p>}
                         </div>
                     </>
                 )}
@@ -311,6 +289,7 @@ export const AuthPage: React.FC = () => {
                 </button>
             </form>
 
+            {/* Social Login Section */}
             <div className="mt-12 pt-8 border-t border-slate-100 text-center">
                 <p className="text-slate-400 text-sm mb-6">或者使用以下方式继续</p>
                 <div className="flex justify-center gap-6">

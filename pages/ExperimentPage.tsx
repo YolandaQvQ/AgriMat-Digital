@@ -1,14 +1,17 @@
-
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { EXPERIMENTS } from '../constants';
 import { Experiment } from '../types';
-import { Search, Filter, Beaker, CheckCircle, Clock, AlertCircle, FileText, ChevronRight, X, LineChart as IconLineChart, Printer, Download } from 'lucide-react';
+import { Search, Filter, Beaker, CheckCircle, Clock, AlertCircle, FileText, ChevronRight, X, LineChart as IconLineChart, Printer, Download, Loader2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 export const ExperimentPage: React.FC = () => {
   const [filterType, setFilterType] = useState('全部');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedExp, setSelectedExp] = useState<Experiment | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   const filteredExperiments = EXPERIMENTS.filter(exp => {
     const matchesType = filterType === '全部' || exp.type === filterType;
@@ -24,6 +27,134 @@ export const ExperimentPage: React.FC = () => {
       case 'Processing': return 'text-blue-600 bg-blue-50 border-blue-200';
       default: return 'text-slate-500 bg-slate-50 border-slate-200';
     }
+  };
+
+  const handleExportPDF = async () => {
+      if (!modalRef.current || !selectedExp) return;
+      setIsExporting(true);
+
+      const element = modalRef.current;
+      const clone = element.cloneNode(true) as HTMLElement;
+
+      // Prepare clone for PDF A4 format
+      const A4_WIDTH_PX = 794; 
+      const wrapper = document.createElement('div');
+      wrapper.style.position = 'absolute';
+      wrapper.style.top = '-10000px';
+      wrapper.style.left = '0';
+      wrapper.style.width = `${A4_WIDTH_PX}px`;
+      wrapper.style.zIndex = '-1';
+      wrapper.style.backgroundColor = '#ffffff';
+      wrapper.appendChild(clone);
+      document.body.appendChild(wrapper);
+
+      try {
+          // Fix styles for printing
+          clone.style.height = 'auto';
+          clone.style.maxHeight = 'none';
+          clone.style.overflow = 'visible';
+          clone.style.width = '100%';
+          const scrollable = clone.querySelector('.custom-scrollbar');
+          if(scrollable) {
+              (scrollable as HTMLElement).style.overflow = 'visible';
+              (scrollable as HTMLElement).style.height = 'auto';
+          }
+
+          // Fix specific layout issues for PDF ("not in box")
+          // 1. Remove border from "Test Type" badge
+          const typeBadge = clone.querySelector('.bg-agri-100.border.border-agri-200');
+          if (typeBadge) {
+              typeBadge.classList.remove('border', 'border-agri-200');
+          }
+          
+          // Generate
+          const cloneHeight = clone.scrollHeight;
+          const canvas = await html2canvas(clone, {
+              scale: 2,
+              useCORS: true,
+              logging: false,
+              backgroundColor: '#ffffff',
+              width: A4_WIDTH_PX,
+              windowWidth: A4_WIDTH_PX,
+              height: cloneHeight,
+              windowHeight: cloneHeight
+          });
+
+          const pdf = new jsPDF('p', 'mm', 'a4');
+          const imgData = canvas.toDataURL('image/jpeg', 0.95);
+          const pdfWidth = 210;
+          const pdfHeight = 297;
+          const margin = 10;
+          const contentWidth = pdfWidth - (margin * 2);
+          const contentHeight = pdfHeight - (margin * 2);
+
+          const imgProps = pdf.getImageProperties(imgData);
+          const imgHeight = (imgProps.height * contentWidth) / imgProps.width;
+
+          let heightLeft = imgHeight;
+          let position = margin;
+
+          // First Page
+          pdf.addImage(imgData, 'JPEG', margin, position, contentWidth, imgHeight);
+          heightLeft -= contentHeight;
+
+          // Next Pages
+          while (heightLeft > 0) {
+              position -= contentHeight; 
+              pdf.addPage();
+              pdf.addImage(imgData, 'JPEG', margin, position, contentWidth, imgHeight);
+              heightLeft -= contentHeight;
+          }
+          pdf.save(`${selectedExp.testCode}_Report.pdf`);
+
+      } catch (error) {
+          console.error("PDF Export failed", error);
+          alert("导出失败，请重试");
+      } finally {
+          if (document.body.contains(wrapper)) {
+            document.body.removeChild(wrapper);
+          }
+          setIsExporting(false);
+      }
+  };
+
+  const handleExportCSV = () => {
+      if(!selectedExp) return;
+
+      let csv = "Section,Key,Value\n";
+      csv += `Basic,Test Code,${selectedExp.testCode}\n`;
+      csv += `Basic,Title,${selectedExp.title}\n`;
+      csv += `Basic,Material,${selectedExp.materialName}\n`;
+      csv += `Basic,Date,${selectedExp.date}\n`;
+      csv += `Basic,Standard,${selectedExp.standard}\n`;
+      csv += `Basic,Operator,${selectedExp.operator}\n`;
+
+      Object.entries(selectedExp.conditions).forEach(([k, v]) => {
+          csv += `Conditions,"${k}","${v}"\n`;
+      });
+      Object.entries(selectedExp.results).forEach(([k, v]) => {
+          csv += `Results,"${k}","${v}"\n`;
+      });
+      
+      // Chart Data if exists
+      if(selectedExp.chartData && selectedExp.chartData.length > 0) {
+          csv += "\nChart Data\n";
+          const keys = Object.keys(selectedExp.chartData[0]);
+          csv += keys.join(",") + "\n";
+          selectedExp.chartData.forEach(row => {
+              csv += keys.map(k => row[k]).join(",") + "\n";
+          });
+      }
+
+      const bom = '\uFEFF';
+      const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${selectedExp.testCode}_Data.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
   };
 
   return (
@@ -155,7 +286,7 @@ export const ExperimentPage: React.FC = () => {
       {/* Detail Modal */}
       {selectedExp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-             <div className="bg-white w-full max-w-5xl max-h-[90vh] rounded-xl shadow-2xl overflow-hidden flex flex-col ring-1 ring-slate-900/5">
+             <div ref={modalRef} className="bg-white w-full max-w-5xl max-h-[90vh] rounded-xl shadow-2xl overflow-hidden flex flex-col ring-1 ring-slate-900/5">
                 
                 {/* Modal Header */}
                 <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center shrink-0">
@@ -169,10 +300,10 @@ export const ExperimentPage: React.FC = () => {
                         <p className="text-xs text-slate-500 font-mono">ID: {selectedExp.testCode}</p>
                     </div>
                     <div className="flex gap-2">
-                        <button className="p-2 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 text-slate-500 hover:text-agri-600 transition" title="打印报告">
-                            <Printer size={20} />
+                        <button onClick={handleExportPDF} disabled={isExporting} className="p-2 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 text-slate-500 hover:text-agri-600 transition flex items-center gap-1 disabled:opacity-50" title="导出 PDF">
+                            {isExporting ? <Loader2 size={20} className="animate-spin" /> : <FileText size={20} />}
                         </button>
-                        <button className="p-2 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 text-slate-500 hover:text-agri-600 transition" title="导出数据">
+                        <button onClick={handleExportCSV} className="p-2 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 text-slate-500 hover:text-agri-600 transition" title="导出 CSV">
                             <Download size={20} />
                         </button>
                         <div className="w-px bg-slate-300 mx-1 h-6 self-center"></div>
