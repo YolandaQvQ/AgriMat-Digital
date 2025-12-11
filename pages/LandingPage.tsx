@@ -1,6 +1,5 @@
-
-import React, { useState, useEffect, useRef } from 'react';
-import { ArrowRight, Layers, Settings, MonitorPlay, Database, Cpu, Zap, ChevronRight, PlayCircle, BarChart3, TrendingUp } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { ArrowRight, Layers, Settings, MonitorPlay, Database, Cpu, Zap, ChevronRight, PlayCircle, BarChart3, TrendingUp, Users, Microscope, Award } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { CASES } from '../constants';
@@ -8,74 +7,131 @@ import { Footer } from '../components/Footer';
 
 const SlideSection = ({ children, className = "", id }: { children?: React.ReactNode, className?: string, id?: string }) => {
   return (
-    <section id={id} className={`h-screen w-full snap-start shrink-0 flex flex-col pt-20 relative overflow-hidden ${className}`}>
-      <div className="w-full h-full flex flex-col justify-center overflow-y-auto no-scrollbar">
+    <section id={id} className={`h-screen w-full shrink-0 flex flex-col pt-20 relative overflow-hidden ${className}`}>
+      <div className="w-full h-full flex flex-col justify-center">
          {children}
       </div>
     </section>
   );
 };
 
+const SECTIONS = ['showcase', 'materials', 'equipment', 'simulation', 'performance', 'cases', 'about'];
+
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [activeIndex, setActiveIndex] = useState(0);
+  const isScrolling = useRef(false);
+  const touchStartY = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Update active dot based on scroll position
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const handleScroll = () => {
-      const index = Math.round(container.scrollTop / window.innerHeight);
-      setActiveIndex(index);
-    };
-
-    container.addEventListener('scroll', handleScroll, { passive: true });
-    return () => container.removeEventListener('scroll', handleScroll);
+  // Smooth scroll handler
+  const scrollTo = useCallback((index: number) => {
+    if (index < 0 || index >= SECTIONS.length) return;
+    
+    isScrolling.current = true;
+    setActiveIndex(index);
+    
+    // Lock scrolling during animation duration (1000ms)
+    setTimeout(() => {
+        isScrolling.current = false;
+    }, 1000);
   }, []);
 
-  // Listen for Hash changes to scroll to section
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isScrolling.current) return;
+      if (e.key === 'ArrowDown' || e.key === 'PageDown') {
+        e.preventDefault();
+        scrollTo(activeIndex + 1);
+      } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+        e.preventDefault();
+        scrollTo(activeIndex - 1);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeIndex, scrollTo]);
+
+  // Wheel navigation
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      if (isScrolling.current) return;
+      
+      // Threshold to avoid accidental micro-scrolls
+      if (Math.abs(e.deltaY) > 30) {
+        if (e.deltaY > 0) {
+          scrollTo(activeIndex + 1);
+        } else {
+          scrollTo(activeIndex - 1);
+        }
+      }
+    };
+    
+    // Use passive: false to potentially prevent default if needed, 
+    // though here we just obscure the body scroll anyway.
+    window.addEventListener('wheel', handleWheel, { passive: true });
+    return () => window.removeEventListener('wheel', handleWheel);
+  }, [activeIndex, scrollTo]);
+
+  // Touch navigation
+  useEffect(() => {
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartY.current = e.touches[0].clientY;
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (isScrolling.current) return;
+      const touchEndY = e.changedTouches[0].clientY;
+      const diff = touchStartY.current - touchEndY;
+
+      if (Math.abs(diff) > 50) { // Swipe threshold
+         if (diff > 0) {
+           scrollTo(activeIndex + 1);
+         } else {
+           scrollTo(activeIndex - 1);
+         }
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    return () => {
+       window.removeEventListener('touchstart', handleTouchStart);
+       window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [activeIndex, scrollTo]);
+
+  // Hash navigation
   useEffect(() => {
     if (location.hash) {
       const id = location.hash.replace('#', '');
-      const element = document.getElementById(id);
-      
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const index = SECTIONS.indexOf(id);
+      if (index !== -1) {
+        scrollTo(index);
       }
     }
-  }, [location]);
-
-  const scrollToSection = (index: number) => {
-    const container = containerRef.current;
-    if (container) {
-      container.scrollTo({
-        top: index * window.innerHeight,
-        behavior: 'smooth'
-      });
-    }
-  };
+  }, [location, scrollTo]);
 
   const buttonClassBase = "px-10 py-4 bg-agri-600 hover:bg-agri-500 text-white text-lg font-bold rounded-lg transition-all duration-300 shadow-lg shadow-agri-500/30 flex items-center justify-center w-fit";
   const buttonClassCenter = `${buttonClassBase} mx-auto`;
 
   return (
-    <div className="fixed inset-0 overflow-hidden bg-white font-sans text-slate-700">
-      {/* Scroll Snap Container */}
+    <div className="fixed inset-0 overflow-hidden bg-white font-sans text-slate-700 select-none">
+      
+      {/* Transform Container */}
       <div 
         ref={containerRef}
-        className="h-full w-full overflow-y-scroll snap-y snap-mandatory scroll-smooth no-scrollbar"
+        className="w-full h-full transition-transform duration-1000 ease-[cubic-bezier(0.645,0.045,0.355,1.000)] will-change-transform"
+        style={{ transform: `translateY(-${activeIndex * 100}%)` }}
       >
         
         {/* 1. Hero */}
         <SlideSection id="showcase" className="bg-white">
           <div className="absolute inset-0 z-0 pointer-events-none">
-             {/* Subtle breathing blobs */}
              <div className="absolute top-[-10%] right-[-5%] w-[800px] h-[800px] bg-sky-50/80 rounded-full blur-[100px] animate-breathe opacity-60"></div>
              <div className="absolute bottom-[-10%] left-[-5%] w-[600px] h-[600px] bg-blue-50/80 rounded-full blur-[80px] animate-breathe-slow opacity-60"></div>
-             {/* Grid pattern */}
              <div className="absolute inset-0 opacity-[0.4]" style={{ backgroundImage: 'linear-gradient(rgba(14, 165, 233, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(14, 165, 233, 0.08) 1px, transparent 1px)', backgroundSize: '64px 64px' }}></div>
           </div>
 
@@ -83,6 +139,7 @@ export const LandingPage: React.FC = () => {
             className="relative z-10 text-center px-4 max-w-5xl mx-auto mt-[-5vh]"
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: false }}
             transition={{ duration: 0.8 }}
           >
             <div className="inline-flex items-center px-4 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-agri-700 text-sm font-bold mb-8 shadow-sm">
@@ -101,11 +158,8 @@ export const LandingPage: React.FC = () => {
             </p>
             
             <div className="flex justify-center gap-5">
-              <button onClick={() => scrollToSection(1)} className={buttonClassCenter}>
+              <button onClick={() => scrollTo(1)} className={buttonClassCenter}>
                 开始探索 <ChevronRight className="ml-2" size={20}/>
-              </button>
-              <button onClick={() => navigate('/auth')} className="px-10 py-4 bg-white border border-slate-200 text-slate-700 text-lg font-bold rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm">
-                注册账号
               </button>
             </div>
           </motion.div>
@@ -117,6 +171,7 @@ export const LandingPage: React.FC = () => {
             <motion.div 
               initial={{ opacity: 0, x: -30 }}
               whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: false }}
               transition={{ duration: 0.6 }}
             >
                <div className="w-14 h-14 bg-white rounded-xl flex items-center justify-center mb-6 text-agri-600 shadow-sm border border-slate-100">
@@ -142,12 +197,12 @@ export const LandingPage: React.FC = () => {
             <motion.div 
                initial={{ opacity: 0, scale: 0.95 }}
                whileInView={{ opacity: 1, scale: 1 }}
+               viewport={{ once: false }}
                transition={{ duration: 0.6 }}
                className="relative"
             >
                <div className="bg-white rounded-2xl p-1 shadow-xl border border-slate-200/60 rotate-2 hover:rotate-0 transition-transform duration-500">
                   <div className="bg-slate-50 rounded-xl overflow-hidden border border-slate-100">
-                      {/* Mock UI for Data Table */}
                       <div className="px-6 py-4 border-b border-slate-200 bg-white flex justify-between items-center">
                           <span className="font-bold text-slate-700">材料参数表</span>
                           <div className="flex gap-1.5">
@@ -189,6 +244,7 @@ export const LandingPage: React.FC = () => {
                     key={i}
                     initial={{ opacity: 0, y: 20 }}
                     whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: false }}
                     transition={{ delay: i * 0.1, duration: 0.5 }}
                     className="bg-slate-50 p-8 rounded-2xl border border-slate-100 hover:border-agri-200 hover:shadow-lg transition-all group text-left"
                   >
@@ -211,7 +267,7 @@ export const LandingPage: React.FC = () => {
            </div>
         </SlideSection>
 
-        {/* 4. Simulation (Updated Style: Light Theme) */}
+        {/* 4. Simulation */}
         <SlideSection id="simulation" className="bg-slate-50">
            <div className="absolute inset-0 z-0 pointer-events-none">
               <div className="absolute top-1/2 left-0 w-[500px] h-[500px] bg-sky-100/50 rounded-full blur-[100px] -translate-y-1/2"></div>
@@ -221,6 +277,7 @@ export const LandingPage: React.FC = () => {
               <motion.div 
                  initial={{ opacity: 0, scale: 0.95 }}
                  whileInView={{ opacity: 1, scale: 1 }}
+                 viewport={{ once: false }}
                  transition={{ duration: 0.6 }}
               >
                   <div className="rounded-xl overflow-hidden shadow-2xl border border-slate-200 bg-white aspect-video relative group cursor-pointer" onClick={() => navigate('/simulation')}>
@@ -241,6 +298,7 @@ export const LandingPage: React.FC = () => {
               <motion.div 
                 initial={{ opacity: 0, x: 30 }}
                 whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: false }}
                 transition={{ duration: 0.6 }}
               >
                  <div className="w-14 h-14 bg-white rounded-xl flex items-center justify-center mb-6 text-sky-600 shadow-sm border border-slate-200">
@@ -258,13 +316,14 @@ export const LandingPage: React.FC = () => {
            </div>
         </SlideSection>
 
-        {/* 5. Performance Evaluation (Updated Style: Consistent Light Theme - REMOVED PURPLE) */}
+        {/* 5. Performance */}
         <SlideSection id="performance" className="bg-white">
            <div className="max-w-7xl mx-auto px-6 w-full grid grid-cols-1 md:grid-cols-2 gap-20 items-center">
               <motion.div 
                 className="order-2 md:order-1"
                 initial={{ opacity: 0, x: -30 }}
                 whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: false }}
                 transition={{ duration: 0.6 }}
               >
                  <div className="w-14 h-14 bg-white rounded-xl flex items-center justify-center mb-6 text-agri-600 shadow-sm border border-slate-100">
@@ -279,7 +338,6 @@ export const LandingPage: React.FC = () => {
                     <button onClick={() => navigate('/performance')} className="px-10 py-4 bg-slate-900 hover:bg-slate-800 text-white text-lg font-bold rounded-lg transition-all duration-300 shadow-lg shadow-slate-900/30 flex items-center justify-center w-fit">
                         体验 AI 评估 <Zap className="ml-2" size={20} />
                     </button>
-                    {/* Secondary button for consistency */}
                     <div className="flex items-center text-sm text-slate-400">
                         <span className="w-2 h-2 rounded-full bg-green-500 mr-2 animate-pulse"></span>
                         模型在线
@@ -291,15 +349,12 @@ export const LandingPage: React.FC = () => {
                  className="order-1 md:order-2"
                  initial={{ opacity: 0, scale: 0.95 }}
                  whileInView={{ opacity: 1, scale: 1 }}
+                 viewport={{ once: false }}
                  transition={{ duration: 0.6 }}
               >
                   <div className="relative">
-                      {/* Decorative Background - Changed from purple to sky/indigo */}
                       <div className="absolute -inset-4 bg-gradient-to-tr from-sky-100 to-indigo-100 rounded-3xl opacity-60 blur-2xl"></div>
-                      
-                      {/* Main Card */}
                       <div className="bg-white rounded-2xl p-8 shadow-xl border border-slate-100 relative">
-                          {/* Header */}
                           <div className="flex items-center justify-between mb-8 border-b border-slate-100 pb-4">
                               <div className="flex items-center gap-3">
                                   <div className="p-2 bg-agri-50 rounded-lg text-agri-600">
@@ -316,7 +371,6 @@ export const LandingPage: React.FC = () => {
                               </div>
                           </div>
 
-                          {/* Content Simulation */}
                           <div className="space-y-6">
                               <div className="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-100">
                                   <span className="text-sm font-bold text-slate-600">预计使用寿命</span>
@@ -329,7 +383,6 @@ export const LandingPage: React.FC = () => {
                                       <span>98.5%</span>
                                   </div>
                                   <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                      {/* Updated Gradient */}
                                       <div className="bg-gradient-to-r from-agri-500 to-sky-400 h-full w-[98.5%]"></div>
                                   </div>
                               </div>
@@ -370,6 +423,7 @@ export const LandingPage: React.FC = () => {
                     key={item.id}
                     initial={{ opacity: 0, y: 20 }}
                     whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: false }}
                     transition={{ delay: i * 0.1, duration: 0.5 }}
                     className="group bg-white rounded-xl overflow-hidden border border-slate-200 hover:border-agri-200 hover:shadow-lg transition-all cursor-pointer flex flex-col h-full"
                     onClick={() => navigate('/cases')}
@@ -397,22 +451,40 @@ export const LandingPage: React.FC = () => {
            </div>
         </SlideSection>
 
-        {/* 7. Footer Section */}
-        <section id="about" className="h-auto min-h-[50vh] w-full snap-start flex flex-col justify-end bg-white border-t border-slate-200">
-             <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
-                  <h2 className="text-4xl font-bold text-slate-900 mb-6">准备好开启数字化研发了吗？</h2>
-                  <p className="text-lg text-slate-500 mb-10 max-w-2xl">
-                     加入 AgriMat Digital，与行业顶尖的农机工程师一起，用数据驱动每一次创新。
-                  </p>
-                  <div className="flex gap-4">
-                     <button onClick={() => navigate('/auth')} className="px-8 py-3 bg-slate-900 text-white font-bold rounded-lg hover:bg-slate-800 transition shadow-lg">
-                        立即注册
-                     </button>
-                     <button onClick={() => navigate('/materials')} className="px-8 py-3 bg-white text-slate-700 border border-slate-300 font-bold rounded-lg hover:border-slate-400 transition">
-                        浏览材料库
-                     </button>
-                  </div>
+        {/* 7. Research Team & Footer Section */}
+        <section id="about" className="h-screen w-full shrink-0 flex flex-col bg-white">
+             {/* Team Content */}
+             <div className="flex-1 w-full max-w-7xl mx-auto px-6 flex flex-col justify-center">
+                 <div className="mb-12 text-center md:text-left">
+                     <span className="text-agri-600 font-bold tracking-widest uppercase mb-3 block text-sm">Our Team</span>
+                     <h2 className="text-4xl md:text-5xl font-bold text-slate-900">核心研究团队</h2>
+                     <p className="text-lg text-slate-500 mt-4 max-w-2xl">
+                         汇聚材料科学、机械工程与人工智能领域的顶尖专家，共同构建农机装备数字化的未来。
+                     </p>
+                 </div>
+
+                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                     {[
+                         { name: "张教授", role: "首席科学家", desc: "材料科学专家，30年农机材料研究经验。", icon: <Award size={24}/>, color: "bg-blue-50 text-blue-600" },
+                         { name: "李博士", role: "AI 算法负责人", desc: "前 Google 资深工程师，主攻机器学习与寿命预测模型。", icon: <Cpu size={24}/>, color: "bg-purple-50 text-purple-600" },
+                         { name: "王总工", role: "机械设计专家", desc: "资深农机设计专家，主导多款大型收获机械研发。", icon: <Settings size={24}/>, color: "bg-orange-50 text-orange-600" },
+                         { name: "陈研究员", role: "仿真实验主管", desc: "精通 LS-DYNA 与 Fluent，专注于土壤切削仿真。", icon: <Microscope size={24}/>, color: "bg-green-50 text-green-600" },
+                     ].map((member, i) => (
+                         <div key={i} className="bg-slate-50 rounded-xl p-6 border border-slate-100 hover:border-agri-200 hover:shadow-lg transition-all group">
+                             <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-4 ${member.color}`}>
+                                 {member.icon}
+                             </div>
+                             <h3 className="text-xl font-bold text-slate-900 mb-1">{member.name}</h3>
+                             <div className="text-xs font-bold text-agri-600 uppercase tracking-wide mb-3">{member.role}</div>
+                             <p className="text-sm text-slate-500 leading-relaxed">
+                                 {member.desc}
+                             </p>
+                         </div>
+                     ))}
+                 </div>
              </div>
+             
+             {/* Footer Component */}
              <Footer />
         </section>
 
@@ -420,10 +492,10 @@ export const LandingPage: React.FC = () => {
 
       {/* Pagination Dots */}
       <div className="fixed right-6 top-1/2 transform -translate-x-1/2 z-40 hidden md:flex flex-col gap-3">
-        {[0, 1, 2, 3, 4, 5, 6].map((index) => (
+        {SECTIONS.map((_, index) => (
           <button
             key={index}
-            onClick={() => scrollToSection(index)}
+            onClick={() => scrollTo(index)}
             className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
               activeIndex === index 
                 ? 'bg-agri-600 scale-125' 

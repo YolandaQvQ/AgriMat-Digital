@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X, ChevronDown, User, LogOut } from 'lucide-react';
@@ -51,6 +50,11 @@ export const Navbar: React.FC = () => {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // Do not render Navbar on Auth or Register pages
+  if (isAuthPage || isRegisterPage) {
+    return null;
+  }
 
   const handleNavClick = (item: NavItem) => {
     if (item.id === 'materials' && location.pathname === '/materials') return;
@@ -145,11 +149,9 @@ export const Navbar: React.FC = () => {
                 </button>
               </div>
             ) : (
-              !isAuthPage && !isRegisterPage && (
                 <Link to="/auth" className="px-7 py-2.5 rounded-full text-[15px] font-bold transition-all border border-slate-200 bg-white text-slate-700 hover:bg-agri-500 hover:border-agri-500 hover:text-white hover:shadow-lg hover:shadow-agri-500/20 backdrop-blur-md">
                   登录平台
                 </Link>
-              )
             )}
           </div>
 
@@ -196,11 +198,9 @@ export const Navbar: React.FC = () => {
                    <LogOut size={20} className="mr-2" /> 退出登录
                  </button>
                ) : (
-                 !isAuthPage && !isRegisterPage && (
                    <Link to="/auth" className="block w-full text-center px-4 py-4 bg-agri-500 text-white font-bold rounded-xl shadow-lg hover:bg-agri-400 text-lg">
                      立即登录
                    </Link>
-                 )
                )}
             </div>
           </div>

@@ -11,7 +11,9 @@ export const ExperimentPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedExp, setSelectedExp] = useState<Experiment | null>(null);
   const [isExporting, setIsExporting] = useState(false);
-  const modalRef = useRef<HTMLDivElement>(null);
+  
+  // No longer need reference to the modal DOM, as we build export DOM manually
+  // const modalRef = useRef<HTMLDivElement>(null);
 
   const filteredExperiments = EXPERIMENTS.filter(exp => {
     const matchesType = filterType === '全部' || exp.type === filterType;
@@ -30,80 +32,137 @@ export const ExperimentPage: React.FC = () => {
   };
 
   const handleExportPDF = async () => {
-      if (!modalRef.current || !selectedExp) return;
+      if (!selectedExp) return;
       setIsExporting(true);
 
-      const element = modalRef.current;
-      const clone = element.cloneNode(true) as HTMLElement;
+      const container = document.createElement('div');
+      container.style.position = 'absolute';
+      container.style.top = '-10000px';
+      container.style.left = '0';
+      container.style.width = '794px'; 
+      container.style.minHeight = '1123px';
+      container.style.backgroundColor = '#fff';
+      container.style.padding = '40px';
+      container.style.boxSizing = 'border-box';
+      container.style.fontFamily = '"Noto Sans SC", sans-serif';
+      container.style.zIndex = '-1000';
 
-      // Prepare clone for PDF A4 format
-      const A4_WIDTH_PX = 794; 
-      const wrapper = document.createElement('div');
-      wrapper.style.position = 'absolute';
-      wrapper.style.top = '-10000px';
-      wrapper.style.left = '0';
-      wrapper.style.width = `${A4_WIDTH_PX}px`;
-      wrapper.style.zIndex = '-1';
-      wrapper.style.backgroundColor = '#ffffff';
-      wrapper.appendChild(clone);
-      document.body.appendChild(wrapper);
+      const headerStyle = "border-bottom: 2px solid #1e293b; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end;";
+      const h1Style = "font-size: 24px; font-weight: 800; color: #0f172a; margin: 0; line-height: 1.2;";
+      const subHeaderStyle = "font-size: 14px; color: #64748b; margin-top: 5px;";
+      const sectionStyle = "margin-bottom: 30px; break-inside: avoid;";
+      const sectionTitleStyle = "font-size: 14px; font-weight: 700; color: #1e293b; text-transform: uppercase; border-left: 4px solid #0ea5e9; padding-left: 10px; margin-bottom: 15px;";
+      const tableStyle = "width: 100%; border-collapse: collapse; font-size: 12px;";
+      const tdLabelStyle = "padding: 8px 10px; border-bottom: 1px solid #e2e8f0; color: #64748b; width: 40%; font-weight: 500;";
+      const tdValueStyle = "padding: 8px 10px; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-weight: 700;";
+
+      // Generate Data Tables for Conditions and Results
+      const generateKeyValRows = (data: Record<string, string>) => {
+          return Object.entries(data).map(([k, v]) => `
+             <tr>
+                 <td style="${tdLabelStyle}">${k}</td>
+                 <td style="${tdValueStyle}">${v}</td>
+             </tr>
+          `).join('');
+      };
+
+      // Generate Data Rows for Charts (as table)
+      let chartDataHtml = '';
+      if(selectedExp.chartData && selectedExp.chartData.length > 0) {
+          const keys = Object.keys(selectedExp.chartData[0]);
+          const header = keys.map(k => `<th style="padding:8px; border-bottom:2px solid #e2e8f0; text-align:left; font-size:11px; color:#64748b;">${k}</th>`).join('');
+          const rows = selectedExp.chartData.map(row => 
+              `<tr>${keys.map(k => `<td style="padding:6px 8px; border-bottom:1px solid #f1f5f9; font-size:11px;">${row[k]}</td>`).join('')}</tr>`
+          ).join('');
+          
+          chartDataHtml = `
+            <div style="${sectionStyle}">
+                <h3 style="${sectionTitleStyle}">Test Data Points</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead><tr>${header}</tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+          `;
+      }
+
+      container.innerHTML = `
+        <div style="${headerStyle}">
+            <div>
+                <h1 style="${h1Style}">${selectedExp.title}</h1>
+                <div style="${subHeaderStyle}">Type: ${selectedExp.type} | Code: ${selectedExp.testCode}</div>
+            </div>
+            <div style="text-align: right; font-size: 10px; color: #94a3b8;">
+                <div style="font-weight: bold; font-size: 12px; color: #64748b;">Experiment Report</div>
+                <div>Date: ${selectedExp.date}</div>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 40px; margin-bottom: 30px;">
+            <div style="flex: 1;">
+                 <div style="${sectionStyle}">
+                    <h3 style="${sectionTitleStyle}">Basic Information</h3>
+                    <table style="${tableStyle}">
+                        <tr><td style="${tdLabelStyle}">Material</td><td style="${tdValueStyle}">${selectedExp.materialName}</td></tr>
+                        <tr><td style="${tdLabelStyle}">Standard</td><td style="${tdValueStyle}">${selectedExp.standard}</td></tr>
+                        <tr><td style="${tdLabelStyle}">Operator</td><td style="${tdValueStyle}">${selectedExp.operator}</td></tr>
+                        <tr><td style="${tdLabelStyle}">Status</td><td style="${tdValueStyle}">${selectedExp.status}</td></tr>
+                    </table>
+                 </div>
+
+                 <div style="${sectionStyle}">
+                    <h3 style="${sectionTitleStyle}">Test Conditions</h3>
+                    <table style="${tableStyle}">
+                        ${generateKeyValRows(selectedExp.conditions)}
+                    </table>
+                 </div>
+            </div>
+
+            <div style="flex: 1;">
+                 <div style="${sectionStyle}">
+                    <h3 style="${sectionTitleStyle}">Key Results</h3>
+                    <table style="${tableStyle}">
+                        ${generateKeyValRows(selectedExp.results)}
+                    </table>
+                 </div>
+            </div>
+        </div>
+        
+        ${chartDataHtml}
+
+        <div style="margin-top: 50px; border-top: 1px solid #e2e8f0; padding-top: 10px; text-align: center; font-size: 10px; color: #cbd5e1;">
+            Generated by AgriMat Digital Platform
+        </div>
+      `;
+
+      document.body.appendChild(container);
 
       try {
-          // Fix styles for printing
-          clone.style.height = 'auto';
-          clone.style.maxHeight = 'none';
-          clone.style.overflow = 'visible';
-          clone.style.width = '100%';
-          const scrollable = clone.querySelector('.custom-scrollbar');
-          if(scrollable) {
-              (scrollable as HTMLElement).style.overflow = 'visible';
-              (scrollable as HTMLElement).style.height = 'auto';
-          }
-
-          // Fix specific layout issues for PDF ("not in box")
-          // 1. Remove border from "Test Type" badge
-          const typeBadge = clone.querySelector('.bg-agri-100.border.border-agri-200');
-          if (typeBadge) {
-              typeBadge.classList.remove('border', 'border-agri-200');
-          }
-          
-          // Generate
-          const cloneHeight = clone.scrollHeight;
-          const canvas = await html2canvas(clone, {
+          const canvas = await html2canvas(container, {
               scale: 2,
               useCORS: true,
               logging: false,
-              backgroundColor: '#ffffff',
-              width: A4_WIDTH_PX,
-              windowWidth: A4_WIDTH_PX,
-              height: cloneHeight,
-              windowHeight: cloneHeight
+              backgroundColor: '#ffffff'
           });
 
+          const imgData = canvas.toDataURL('image/jpeg', 1.0);
           const pdf = new jsPDF('p', 'mm', 'a4');
-          const imgData = canvas.toDataURL('image/jpeg', 0.95);
           const pdfWidth = 210;
           const pdfHeight = 297;
-          const margin = 10;
-          const contentWidth = pdfWidth - (margin * 2);
-          const contentHeight = pdfHeight - (margin * 2);
-
           const imgProps = pdf.getImageProperties(imgData);
-          const imgHeight = (imgProps.height * contentWidth) / imgProps.width;
-
+          const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
+          
           let heightLeft = imgHeight;
-          let position = margin;
+          let position = 0;
+          
+          pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+          heightLeft -= pdfHeight;
 
-          // First Page
-          pdf.addImage(imgData, 'JPEG', margin, position, contentWidth, imgHeight);
-          heightLeft -= contentHeight;
-
-          // Next Pages
           while (heightLeft > 0) {
-              position -= contentHeight; 
+              position = heightLeft - imgHeight; 
               pdf.addPage();
-              pdf.addImage(imgData, 'JPEG', margin, position, contentWidth, imgHeight);
-              heightLeft -= contentHeight;
+              pdf.addImage(imgData, 'JPEG', 0, -(pdfHeight * (Math.ceil(imgHeight / pdfHeight) - Math.ceil(heightLeft / pdfHeight))), pdfWidth, imgHeight);
+              heightLeft -= pdfHeight;
           }
           pdf.save(`${selectedExp.testCode}_Report.pdf`);
 
@@ -111,9 +170,7 @@ export const ExperimentPage: React.FC = () => {
           console.error("PDF Export failed", error);
           alert("导出失败，请重试");
       } finally {
-          if (document.body.contains(wrapper)) {
-            document.body.removeChild(wrapper);
-          }
+          document.body.removeChild(container);
           setIsExporting(false);
       }
   };
@@ -286,7 +343,7 @@ export const ExperimentPage: React.FC = () => {
       {/* Detail Modal */}
       {selectedExp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-             <div ref={modalRef} className="bg-white w-full max-w-5xl max-h-[90vh] rounded-xl shadow-2xl overflow-hidden flex flex-col ring-1 ring-slate-900/5">
+             <div className="bg-white w-full max-w-5xl max-h-[90vh] rounded-xl shadow-2xl overflow-hidden flex flex-col ring-1 ring-slate-900/5">
                 
                 {/* Modal Header */}
                 <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center shrink-0">

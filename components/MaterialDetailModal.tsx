@@ -17,8 +17,6 @@ interface MaterialDetailModalProps {
 }
 
 export const MaterialDetailModal: React.FC<MaterialDetailModalProps> = ({ material, onClose }) => {
-  // Ref for the entire report card to capture everything including header
-  const reportRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
   
   const copyLink = () => {
@@ -28,132 +26,168 @@ export const MaterialDetailModal: React.FC<MaterialDetailModalProps> = ({ materi
   };
 
   const handleExportPDF = async () => {
-    if (!reportRef.current) return;
-    
     setIsExporting(true);
     
-    // 1. Create Clone
-    const original = reportRef.current;
-    const clone = original.cloneNode(true) as HTMLElement;
+    // Create a temporary container for the print layout
+    // This uses a simplified, document-style layout specifically for PDF generation
+    const container = document.createElement('div');
+    container.style.position = 'absolute';
+    container.style.top = '-10000px';
+    container.style.left = '0';
+    container.style.width = '794px'; // A4 width at ~96 DPI
+    container.style.minHeight = '1123px'; // A4 height
+    container.style.backgroundColor = '#fff';
+    container.style.padding = '40px';
+    container.style.boxSizing = 'border-box';
+    container.style.fontFamily = '"Noto Sans SC", sans-serif';
+    container.style.zIndex = '-1000';
     
-    // 2. Setup Clone Environment (A4 Width)
-    const A4_WIDTH_PX = 794; // approx 210mm @ 96dpi
+    // Inline styles for the generated HTML
+    const headerStyle = "border-bottom: 2px solid #1e293b; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end;";
+    const h1Style = "font-size: 28px; font-weight: 800; color: #0f172a; margin: 0; line-height: 1.2;";
+    const subHeaderStyle = "font-size: 16px; color: #64748b; margin-top: 5px;";
+    const sectionStyle = "margin-bottom: 30px; break-inside: avoid;";
+    const sectionTitleStyle = "font-size: 14px; font-weight: 700; color: #1e293b; text-transform: uppercase; border-left: 4px solid #0ea5e9; padding-left: 10px; margin-bottom: 15px;";
+    const tableStyle = "width: 100%; border-collapse: collapse; font-size: 12px;";
+    const tdLabelStyle = "padding: 8px 10px; border-bottom: 1px solid #e2e8f0; color: #64748b; width: 35%; font-weight: 500;";
+    const tdValueStyle = "padding: 8px 10px; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-weight: 700;";
+    const textStyle = "font-size: 12px; line-height: 1.6; color: #334155; text-align: justify;";
     
-    const wrapper = document.createElement('div');
-    wrapper.style.position = 'absolute';
-    wrapper.style.top = '-10000px';
-    wrapper.style.left = '0';
-    wrapper.style.width = `${A4_WIDTH_PX}px`;
-    wrapper.style.zIndex = '-1'; // Ensure it's behind everything
-    wrapper.style.backgroundColor = '#ffffff';
-    wrapper.appendChild(clone);
-    document.body.appendChild(wrapper);
+    // Helper to generate property tables
+    const generateTableHtml = (title: string, data?: Record<string, string>) => {
+        if (!data || Object.keys(data).length === 0) return '';
+        const rows = Object.entries(data).map(([k, v]) => `
+            <tr>
+                <td style="${tdLabelStyle}">${k}</td>
+                <td style="${tdValueStyle}">${v}</td>
+            </tr>
+        `).join('');
+        return `
+            <div style="${sectionStyle}">
+                <h3 style="${sectionTitleStyle}">${title}</h3>
+                <table style="${tableStyle}">
+                    ${rows}
+                </table>
+            </div>
+        `;
+    };
+
+    // Construct the clean HTML content
+    container.innerHTML = `
+        <div style="${headerStyle}">
+            <div>
+                <h1 style="${h1Style}">${material.name}</h1>
+                <div style="${subHeaderStyle}">${material.grade || 'N/A'} <span style="font-size: 12px; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; vertical-align: middle; margin-left: 8px;">${material.category}</span></div>
+            </div>
+            <div style="text-align: right; font-size: 10px; color: #94a3b8;">
+                <div style="font-weight: bold; font-size: 12px; color: #64748b;">AgriMat Digital Data Sheet</div>
+                <div>ID: ${material.id}</div>
+                <div>Generated: ${new Date().toLocaleDateString()}</div>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 40px; margin-bottom: 30px;">
+            <div style="flex: 1;">
+                 <div style="${sectionStyle}">
+                    <h3 style="${sectionTitleStyle}">Basic Information</h3>
+                    <table style="${tableStyle}">
+                        <tr><td style="${tdLabelStyle}">Standard</td><td style="${tdValueStyle}">${material.standard || '-'}</td></tr>
+                        <tr><td style="${tdLabelStyle}">Shape</td><td style="${tdValueStyle}">${material.shape || '-'}</td></tr>
+                        <tr><td style="${tdLabelStyle}">Condition</td><td style="${tdValueStyle}">${material.supplyCondition || '-'}</td></tr>
+                        <tr><td style="${tdLabelStyle}">Process</td><td style="${tdValueStyle}">${material.process || '-'}</td></tr>
+                    </table>
+                 </div>
+                 
+                 <div style="${sectionStyle}">
+                    <h3 style="${sectionTitleStyle}">Description</h3>
+                    <p style="${textStyle}">${material.description}</p>
+                 </div>
+
+                 ${material.applicationParts && material.applicationParts.length > 0 ? `
+                 <div style="${sectionStyle}">
+                    <h3 style="${sectionTitleStyle}">Typical Applications</h3>
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        ${material.applicationParts.map(p => `
+                            <span style="font-size: 10px; background: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 4px; font-weight: 600; border: 1px solid #cbd5e1;">${p}</span>
+                        `).join('')}
+                    </div>
+                 </div>
+                 ` : ''}
+            </div>
+
+            <div style="flex: 1;">
+                ${material.wearResistance ? `
+                    <div style="${sectionStyle}">
+                        <h3 style="${sectionTitleStyle}">Wear Resistance</h3>
+                        <p style="${textStyle}">${material.wearResistance}</p>
+                    </div>
+                ` : ''}
+                
+                ${material.corrosionResistance ? `
+                    <div style="${sectionStyle}">
+                        <h3 style="${sectionTitleStyle}">Corrosion Resistance</h3>
+                        <p style="${textStyle}">${material.corrosionResistance}</p>
+                    </div>
+                ` : ''}
+
+                ${generateTableHtml('Chemical Composition', material.chemicalComposition)}
+            </div>
+        </div>
+
+        <div style="${sectionStyle}">
+             <div style="display: flex; gap: 40px; align-items: flex-start;">
+                <div style="flex: 1;">
+                    ${generateTableHtml('Mechanical Properties', material.mechanicalProperties)}
+                </div>
+                <div style="flex: 1;">
+                    ${generateTableHtml('Physical Properties', material.physicalProperties)}
+                    ${generateTableHtml('Thermal Properties', material.thermalProperties)}
+                    ${generateTableHtml('Characteristics', material.characteristicProperties)}
+                </div>
+             </div>
+        </div>
+        
+        <div style="margin-top: 50px; border-top: 1px solid #e2e8f0; padding-top: 10px; text-align: center; font-size: 10px; color: #cbd5e1;">
+            Generated by AgriMat Digital Platform
+        </div>
+    `;
+
+    document.body.appendChild(container);
 
     try {
-        // 3. Clean up the Clone Styles for Printing
-        
-        // Reset container constraints to allow full expansion
-        clone.style.height = 'auto';
-        clone.style.maxHeight = 'none';
-        clone.style.overflow = 'visible';
-        clone.style.width = '100%';
-        clone.style.borderRadius = '0';
-        clone.style.boxShadow = 'none';
-        clone.style.border = 'none';
-
-        // Expand scrollable content
-        const scrollableContent = clone.querySelector('.custom-scrollbar');
-        if (scrollableContent) {
-            (scrollableContent as HTMLElement).style.overflow = 'visible';
-            (scrollableContent as HTMLElement).style.height = 'auto';
-        }
-
-        // Remove Truncation
-        const truncated = clone.querySelectorAll('.truncate');
-        truncated.forEach(el => {
-            el.classList.remove('truncate');
-            el.classList.add('whitespace-normal', 'break-words');
-        });
-
-        // Fix Quick Specs Bar layout
-        const specsItems = clone.querySelectorAll('.min-w-\\[160px\\]');
-        specsItems.forEach(el => {
-            el.classList.remove('min-w-[160px]');
-            (el as HTMLElement).style.minWidth = '0'; 
-            (el as HTMLElement).style.flex = '1 1 auto';
-        });
-
-        // --- SPECIFIC FIXES FOR "NOT IN BOX" ISSUES ---
-        // Remove borders from specific tags to avoid visual overflow glitches
-        
-        // 1. Technical Data Sheet badge
-        const techBadge = clone.querySelector('span.text-xs.font-bold.uppercase.tracking-widest');
-        if (techBadge) {
-            techBadge.classList.remove('border', 'border-slate-300');
-            // Add a simple background instead if needed, or just keep text
-            // (techBadge as HTMLElement).style.border = 'none';
-        }
-
-        // 2. Applications tags
-        // Identify them by the class we used: bg-slate-100
-        const appTags = clone.querySelectorAll('.bg-slate-100.border.border-slate-200');
-        appTags.forEach(tag => {
-           tag.classList.remove('border', 'border-slate-200');
-           (tag as HTMLElement).style.whiteSpace = 'normal'; // Allow wrapping text inside tag
-           (tag as HTMLElement).style.display = 'inline-block';
-           (tag as HTMLElement).style.height = 'auto';
-        });
-
-        // Hide Action Buttons
-        const actionButtons = clone.querySelector('.print\\:hidden'); 
-        if (actionButtons) {
-            (actionButtons as HTMLElement).style.display = 'none';
-        }
-        
-        // Hide Close Button
-        const closeBtn = clone.querySelector('button[title="Close"]'); 
-        if (closeBtn) (closeBtn as HTMLElement).style.display = 'none';
-
-        // 4. Capture High-Res Image
-        // Important: Set height/windowHeight to ensure full capture
-        const cloneHeight = clone.scrollHeight;
-        
-        const canvas = await html2canvas(clone, {
-            scale: 2, 
+        const canvas = await html2canvas(container, {
+            scale: 2,
             useCORS: true,
             logging: false,
-            backgroundColor: '#ffffff',
-            width: A4_WIDTH_PX,
-            windowWidth: A4_WIDTH_PX,
-            height: cloneHeight,
-            windowHeight: cloneHeight
+            backgroundColor: '#ffffff'
         });
 
-        // 5. Generate PDF
+        const imgData = canvas.toDataURL('image/jpeg', 1.0);
         const pdf = new jsPDF('p', 'mm', 'a4');
-        const imgData = canvas.toDataURL('image/jpeg', 0.95);
         const pdfWidth = 210;
         const pdfHeight = 297;
-        const margin = 10;
-        const contentWidth = pdfWidth - (margin * 2);
-        const contentHeight = pdfHeight - (margin * 2);
-        
         const imgProps = pdf.getImageProperties(imgData);
-        const imgHeight = (imgProps.height * contentWidth) / imgProps.width;
+        
+        // Calculate height based on A4 width
+        const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
         
         let heightLeft = imgHeight;
-        let position = margin;
+        let position = 0;
         
-        // First Page
-        pdf.addImage(imgData, 'JPEG', margin, position, contentWidth, imgHeight);
-        heightLeft -= contentHeight;
-        
-        // Subsequent Pages
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+        heightLeft -= pdfHeight;
+
+        // Multi-page handling
         while (heightLeft > 0) {
-            position -= contentHeight; // Move image up by the height of one page's content
+            position = heightLeft - imgHeight; // This logic typically places new page at the remaining top
+            // Simpler multi-page logic:
+            // Just add new pages and offset the image. 
+            // However, a simple way for long content is usually just adding the image shifted up.
+            // But html2canvas captures the whole tall div as one image.
             pdf.addPage();
-            pdf.addImage(imgData, 'JPEG', margin, position, contentWidth, imgHeight);
-            heightLeft -= contentHeight;
+            // Calculate position for the next page segment
+            pdf.addImage(imgData, 'JPEG', 0, -(pdfHeight * (Math.ceil(imgHeight / pdfHeight) - Math.ceil(heightLeft / pdfHeight))), pdfWidth, imgHeight);
+            heightLeft -= pdfHeight;
         }
 
         pdf.save(`${material.name}_${material.grade}_Report.pdf`);
@@ -162,9 +196,7 @@ export const MaterialDetailModal: React.FC<MaterialDetailModalProps> = ({ materi
         console.error('PDF Export Error:', err);
         alert('导出 PDF 失败，请检查网络或重试');
     } finally {
-        if (document.body.contains(wrapper)) {
-            document.body.removeChild(wrapper);
-        }
+        document.body.removeChild(container);
         setIsExporting(false);
     }
   };
@@ -239,8 +271,8 @@ export const MaterialDetailModal: React.FC<MaterialDetailModalProps> = ({ materi
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in print:bg-white print:p-0 print:absolute">
-      {/* Attached Ref to the card container to capture Header + Content */}
-      <div ref={reportRef} className="bg-white rounded-lg shadow-2xl w-full max-w-5xl max-h-[95vh] flex flex-col overflow-hidden ring-1 ring-slate-900/5 print:shadow-none print:max-w-none print:max-h-none print:h-auto print:rounded-none print:ring-0">
+      {/* Detail Modal Content - The displayed UI */}
+      <div className="bg-white rounded-lg shadow-2xl w-full max-w-5xl max-h-[95vh] flex flex-col overflow-hidden ring-1 ring-slate-900/5 print:shadow-none print:max-w-none print:max-h-none print:h-auto print:rounded-none print:ring-0">
          
          {/* Technical Sheet Header */}
          <div className="bg-slate-50 border-b border-slate-200 px-8 py-5 flex justify-between items-start shrink-0 print:bg-white print:border-b-2 print:border-slate-800">
@@ -257,7 +289,6 @@ export const MaterialDetailModal: React.FC<MaterialDetailModalProps> = ({ materi
                 </div>
             </div>
             
-            {/* Buttons Area - Hidden in Print/PDF via class or clone manipulation */}
             <div className="flex gap-2 print:hidden">
                 <button onClick={handleExportPDF} disabled={isExporting} className="flex items-center gap-2 px-3 py-2.5 text-sm font-bold text-white bg-agri-600 hover:bg-agri-500 rounded-lg transition shadow-sm disabled:opacity-70 disabled:cursor-not-allowed" title="Export PDF">
                     {isExporting ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />}
@@ -291,7 +322,6 @@ export const MaterialDetailModal: React.FC<MaterialDetailModalProps> = ({ materi
                 ].map((item, i) => (
                     <div key={i} className="bg-slate-50 px-5 py-3 flex-1 min-w-[160px] print:bg-white print:border print:border-slate-200 print:p-2 print:min-w-0">
                         <div className="text-xs text-slate-500 uppercase font-bold mb-1 tracking-wide">{item.label}</div>
-                        {/* Note: 'truncate' is removed in PDF generation clone */}
                         <div className="text-slate-900 font-bold text-base truncate">{item.value || '-'}</div>
                     </div>
                 ))}

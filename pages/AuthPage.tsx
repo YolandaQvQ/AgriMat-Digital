@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ArrowRight, Mail, Lock, Leaf, Smartphone, MessageSquare, CheckCircle } from 'lucide-react';
+import { ArrowRight, Mail, Lock, Leaf, Smartphone, MessageSquare, CheckCircle, Home } from 'lucide-react';
 
 export const AuthPage: React.FC = () => {
   const navigate = useNavigate();
@@ -123,6 +123,14 @@ export const AuthPage: React.FC = () => {
       </div>
 
       <div className="w-full lg:w-1/2 h-full overflow-y-auto bg-white relative">
+        {/* Return to Home Button */}
+        <div className="absolute top-6 right-6 z-20">
+             <Link to="/" className="flex items-center gap-2 text-slate-400 hover:text-slate-600 transition-colors py-2 px-4 rounded-full hover:bg-slate-50 font-medium text-sm">
+                <Home size={18} />
+                <span className="hidden sm:inline">返回首页</span>
+             </Link>
+        </div>
+
         <div className="min-h-full flex flex-col items-center justify-center p-8 lg:p-12 pt-24 lg:pt-20">
             <div className="w-full max-w-md">
             
