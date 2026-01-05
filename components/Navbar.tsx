@@ -34,13 +34,11 @@ export const Navbar: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   
-  const isAuthPage = location.pathname === '/auth';
-  const isRegisterPage = location.pathname === '/register';
-
   const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
 
   useEffect(() => {
     const handleScroll = () => {
+      // Logic for standard pages
       if (window.scrollY > 20) {
         setIsScrolled(true);
       } else {
@@ -50,11 +48,6 @@ export const Navbar: React.FC = () => {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
-
-  // Do not render Navbar on Auth or Register pages
-  if (isAuthPage || isRegisterPage) {
-    return null;
-  }
 
   const handleNavClick = (item: NavItem) => {
     if (item.id === 'materials' && location.pathname === '/materials') return;

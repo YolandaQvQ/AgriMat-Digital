@@ -1,21 +1,5 @@
 
-
 import { GoogleGenAI, Type } from "@google/genai";
-
-// Initialize Gemini API
-let ai: GoogleGenAI | null = null;
-
-const getAI = () => {
-  if (!ai) {
-    // Safety check for browser environments where process might not be defined
-    const apiKey = typeof process !== 'undefined' ? process.env.API_KEY : '';
-    if (!apiKey) {
-      console.warn("API Key not found in process.env. AI features will use mock data.");
-    }
-    ai = new GoogleGenAI({ apiKey });
-  }
-  return ai;
-};
 
 export interface PredictionInput {
   materialType: string;
@@ -32,7 +16,7 @@ export interface PredictionResult {
 }
 
 /**
- * Uses Gemini 2.5 to predict material performance based on input parameters.
+ * Uses Gemini 3 Flash to predict material performance based on input parameters.
  * Returns structured JSON data for visualization.
  */
 export const predictPerformance = async (input: PredictionInput): Promise<PredictionResult> => {
@@ -51,9 +35,11 @@ export const predictPerformance = async (input: PredictionInput): Promise<Predic
   `;
 
   try {
-    const client = getAI();
-    const response = await client.models.generateContent({
-      model: 'gemini-2.5-flash',
+    // Initializing with the system-provided API key directly
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview', // Use recommended model for text tasks
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -65,23 +51,25 @@ export const predictPerformance = async (input: PredictionInput): Promise<Predic
             riskAnalysis: { type: Type.STRING },
             maintenanceAdvice: { type: Type.STRING },
           },
+          required: ["lifespan", "efficiency", "riskAnalysis", "maintenanceAdvice"]
         },
       },
     });
 
     if (response.text) {
-      return JSON.parse(response.text) as PredictionResult;
+      return JSON.parse(response.text.trim()) as PredictionResult;
     } else {
       throw new Error("No data returned from AI");
     }
   } catch (error) {
     console.error("Gemini API Error:", error);
-    // Fallback mock data in case of API failure (graceful degradation)
-    return {
-      lifespan: 1000,
-      efficiency: 85,
-      riskAnalysis: "API调用失败，显示模拟数据。高温高湿环境下存在疲劳断裂风险。",
-      maintenanceAdvice: "建议每200小时检查一次表面裂纹。",
-    };
+    return getMockData();
   }
 };
+
+const getMockData = (): PredictionResult => ({
+  lifespan: 1000,
+  efficiency: 85,
+  riskAnalysis: "由于环境配置或API调用问题，显示模拟数据。高温高湿环境下存在疲劳断裂风险。",
+  maintenanceAdvice: "建议每200小时检查一次表面裂纹。",
+});

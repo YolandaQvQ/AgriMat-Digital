@@ -7,22 +7,26 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- 引入 Inter 用于 UI，JetBrains Mono 用于技术数据 -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
         theme: {
           extend: {
             fontFamily: {
-              sans: ['"Noto Sans SC"', 'sans-serif'],
+              // 优先使用 Inter，中文回退到 Noto Sans SC
+              sans: ['Inter', '"Noto Sans SC"', 'sans-serif'],
+              // 专门用于数值和牌号的等宽字体
+              mono: ['"JetBrains Mono"', 'monospace'],
             },
             colors: {
               agri: {
-                50: '#f0f9ff', // 极淡的天空蓝
+                50: '#f0f9ff',
                 100: '#e0f2fe',
                 200: '#bae6fd',
                 300: '#7dd3fc',
                 400: '#38bdf8',
-                500: '#0ea5e9', // 主色：天际蓝 (Sky Blue) - 纯净、透亮
+                500: '#0ea5e9',
                 600: '#0284c7',
                 700: '#0369a1',
                 800: '#075985',
@@ -30,7 +34,7 @@
               },
               tech: {
                 50: '#f8fafc',
-                100: '#f1f5f9', // 极冷灰
+                100: '#f1f5f9',
                 200: '#e2e8f0',
                 300: '#cbd5e1',
                 400: '#94a3b8',
@@ -68,7 +72,10 @@
     </script>
     <style>
       html { scroll-behavior: smooth; }
-      /* Hide scrollbar for clean UI but keep functionality */
+      /* 强制数值对齐，提升易读性 */
+      .tabular-nums {
+        font-variant-numeric: tabular-nums;
+      }
       .no-scrollbar::-webkit-scrollbar {
           display: none;
       }
@@ -76,7 +83,6 @@
           -ms-overflow-style: none;
           scrollbar-width: none;
       }
-      /* Custom Scrollbar for specific areas */
       .custom-scrollbar::-webkit-scrollbar {
         width: 6px; 
         height: 6px;
@@ -96,7 +102,6 @@
         body * {
           visibility: hidden;
         }
-        /* Only show the modal content */
         .fixed.inset-0.z-\[60\], .fixed.inset-0.z-\[60\] * {
           visibility: visible;
         }
@@ -109,7 +114,6 @@
           background: white;
           padding: 0;
         }
-        /* Hide navbar, footer, background blobs */
         nav, footer, .animate-breathe, .animate-breathe-slow, button.print\:hidden {
           display: none !important;
         }

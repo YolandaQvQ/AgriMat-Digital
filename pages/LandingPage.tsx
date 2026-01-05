@@ -21,9 +21,17 @@ export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [activeIndex, setActiveIndex] = useState(0);
+  
+  // Use refs to track state without triggering effect re-runs
+  const activeIndexRef = useRef(0);
   const isScrolling = useRef(false);
   const touchStartY = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Sync ref with state
+  useEffect(() => {
+    activeIndexRef.current = activeIndex;
+  }, [activeIndex]);
 
   // Smooth scroll handler
   const scrollTo = useCallback((index: number) => {
@@ -38,72 +46,69 @@ export const LandingPage: React.FC = () => {
     }, 1000);
   }, []);
 
-  // Keyboard navigation
+  // Optimized Event Listeners: Bound once, use refs for current state
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isScrolling.current) return;
+      
+      const current = activeIndexRef.current;
       if (e.key === 'ArrowDown' || e.key === 'PageDown') {
         e.preventDefault();
-        scrollTo(activeIndex + 1);
+        scrollTo(current + 1);
       } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
         e.preventDefault();
-        scrollTo(activeIndex - 1);
+        scrollTo(current - 1);
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeIndex, scrollTo]);
 
-  // Wheel navigation
-  useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
       if (isScrolling.current) return;
       
+      const current = activeIndexRef.current;
       // Threshold to avoid accidental micro-scrolls
       if (Math.abs(e.deltaY) > 30) {
         if (e.deltaY > 0) {
-          scrollTo(activeIndex + 1);
+          scrollTo(current + 1);
         } else {
-          scrollTo(activeIndex - 1);
+          scrollTo(current - 1);
         }
       }
     };
-    
-    // Use passive: false to potentially prevent default if needed, 
-    // though here we just obscure the body scroll anyway.
-    window.addEventListener('wheel', handleWheel, { passive: true });
-    return () => window.removeEventListener('wheel', handleWheel);
-  }, [activeIndex, scrollTo]);
 
-  // Touch navigation
-  useEffect(() => {
     const handleTouchStart = (e: TouchEvent) => {
       touchStartY.current = e.touches[0].clientY;
     };
 
     const handleTouchEnd = (e: TouchEvent) => {
       if (isScrolling.current) return;
+      
+      const current = activeIndexRef.current;
       const touchEndY = e.changedTouches[0].clientY;
       const diff = touchStartY.current - touchEndY;
 
       if (Math.abs(diff) > 50) { // Swipe threshold
          if (diff > 0) {
-           scrollTo(activeIndex + 1);
+           scrollTo(current + 1); // Swipe Up -> Scroll Down
          } else {
-           scrollTo(activeIndex - 1);
+           scrollTo(current - 1); // Swipe Down -> Scroll Up
          }
       }
     };
 
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('wheel', handleWheel, { passive: true });
     window.addEventListener('touchstart', handleTouchStart, { passive: true });
     window.addEventListener('touchend', handleTouchEnd, { passive: true });
+
     return () => {
+       window.removeEventListener('keydown', handleKeyDown);
+       window.removeEventListener('wheel', handleWheel);
        window.removeEventListener('touchstart', handleTouchStart);
        window.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [activeIndex, scrollTo]);
+  }, [scrollTo]); // Dependency on scrollTo is fine as it's a stable useCallback
 
-  // Hash navigation
+  // Hash navigation (Keep this separate as it reacts to location changes)
   useEffect(() => {
     if (location.hash) {
       const id = location.hash.replace('#', '');

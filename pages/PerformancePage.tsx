@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { Loader2, AlertTriangle, CheckCircle, Activity, Lock, ArrowRight, User } from 'lucide-react';
@@ -66,7 +65,8 @@ export const PerformancePage: React.FC = () => {
      { subject: '抗腐蚀', A: result.efficiency, fullMark: 100 },
      { subject: '承载力', A: 90, fullMark: 100 },
      { subject: '热稳性', A: 70, fullMark: 100 },
-     { subject: '寿命', A: Math.min(result.lifespan / 50, 100), fullMark: 100 },
+     // Normalize lifespan relative to a 5000h baseline, capped at 100
+     { subject: '寿命', A: Math.min(Math.round((result.lifespan / 5000) * 100), 100), fullMark: 100 },
   ] : [];
 
   return (

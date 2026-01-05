@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { HashRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { Navbar } from './components/Navbar';
@@ -21,14 +20,18 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isAuthPage = location.pathname === '/auth';
   const isRegisterPage = location.pathname === '/register';
   const isLandingPage = location.pathname === '/';
+  
+  // Logic to show/hide Navbar and Footer based on route
+  const showNavbar = !isAuthPage && !isRegisterPage;
+  const showFooter = !isAuthPage && !isRegisterPage && !isLandingPage;
 
   return (
     <div className="flex flex-col min-h-screen">
-      <Navbar />
+      {showNavbar && <Navbar />}
       <main className="flex-grow">
         {children}
       </main>
-      {!isAuthPage && !isRegisterPage && !isLandingPage && <Footer />}
+      {showFooter && <Footer />}
     </div>
   );
 };

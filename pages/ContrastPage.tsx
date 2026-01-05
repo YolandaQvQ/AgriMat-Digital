@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Material } from '../types';
@@ -34,59 +35,47 @@ export const ContrastPage: React.FC = () => {
 
   // Prepare data for Radar Chart
   const radarData = useMemo(() => {
-    // We need to normalize data because units are different (MPa, GPa, %, etc.)
-    // 1. Identify common measurable properties
     const properties = [
-      { key: '屈服强度', label: '屈服强度', path: 'mechanicalProperties' },
-      { key: '抗拉强度', label: '抗拉强度', path: 'mechanicalProperties' },
-      { key: '断后伸长率', label: '塑性(伸长率)', path: 'mechanicalProperties' },
-      { key: '冲击功', label: '韧性(冲击功)', path: 'mechanicalProperties' },
-      { key: '密度', label: '密度(轻量化)', path: 'physicalProperties', inverse: true } // Inverse because lower density is usually better for lightweight
+      { key: '屈服强度', label: '屈服强度', path: '力学性能' as const },
+      { key: '抗拉强度', label: '抗拉强度', path: '力学性能' as const },
+      { key: '断后伸长率', label: '塑性(伸长率)', path: '力学性能' as const },
+      { key: '冲击功', label: '韧性(冲击功)', path: '力学性能' as const },
+      { key: '密度', label: '密度(轻量化)', path: '物理性能' as const, inverse: true }
     ];
 
-    // 2. Find max values for normalization
     const maxValues: Record<string, number> = {};
     properties.forEach(prop => {
       let max = 0;
       materials.forEach(m => {
-        const group = (m as any)[prop.path];
+        const group = m.technicalSpecifications[prop.path];
         const val = parseValue(group?.[prop.key]);
         if (val > max) max = val;
       });
-      maxValues[prop.key] = max || 1; // Avoid division by zero
+      maxValues[prop.key] = max || 1; 
     });
 
-    // 3. Construct chart data points
     return properties.map(prop => {
       const dataPoint: any = { subject: prop.label, fullMark: 100 };
       materials.forEach(m => {
-        const group = (m as any)[prop.path];
+        const group = m.technicalSpecifications[prop.path];
         const rawVal = parseValue(group?.[prop.key]);
         let normalizedVal = (rawVal / maxValues[prop.key]) * 100;
         
-        // Handle missing data or special cases
         if (!rawVal) normalizedVal = 0;
 
-        // Invert density score (lower is better/lighter, but in radar chart usually outer is "better". 
-        // Let's keep it simple: just normalize value. Or maybe 100 - val? 
-        // For simplicity, let's map actual density relative to max. 
-        // Actually, for density, "better" depends on context. Let's just show relative Magnitude.
-        
         dataPoint[m.id] = Math.round(normalizedVal);
-        dataPoint[`${m.id}_raw`] = rawVal; // Store raw for tooltip
+        dataPoint[`${m.id}_raw`] = rawVal; 
       });
       return dataPoint;
     });
   }, [materials]);
 
-  // Color palette for charts
   const colors = ['#0ea5e9', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#6366f1'];
 
-  // Helper to get all unique keys for a property group across all materials
-  const getUniqueKeys = (propertyGroup: keyof Material) => {
+  const getUniqueKeys = (propertyGroup: keyof Material['technicalSpecifications']) => {
     const keys = new Set<string>();
     materials.forEach(m => {
-      const group = m[propertyGroup] as Record<string, string> | undefined;
+      const group = m.technicalSpecifications[propertyGroup];
       if (group) {
         Object.keys(group).forEach(k => keys.add(k));
       }
@@ -94,12 +83,11 @@ export const ContrastPage: React.FC = () => {
     return Array.from(keys);
   };
 
-  const chemicalKeys = getUniqueKeys('chemicalComposition');
-  const mechanicalKeys = getUniqueKeys('mechanicalProperties');
-  const physicalKeys = getUniqueKeys('physicalProperties');
-  const thermalKeys = getUniqueKeys('thermalProperties');
+  const chemicalKeys = getUniqueKeys('化学成分');
+  const mechanicalKeys = getUniqueKeys('力学性能');
+  const physicalKeys = getUniqueKeys('物理性能');
+  const thermalKeys = getUniqueKeys('热性能');
 
-  // Helper to render a table row
   const renderRow = (label: string, accessor: (m: Material) => string | React.ReactNode, isHeader = false) => (
     <tr className={`border-b border-slate-100 ${isHeader ? 'bg-slate-50' : 'hover:bg-slate-50/50'}`}>
       <td className={`p-3 border-r border-slate-200 sticky left-0 bg-white z-10 w-40 shrink-0 ${isHeader ? 'font-bold text-slate-800' : 'text-slate-500 font-medium'}`}>
@@ -113,8 +101,7 @@ export const ContrastPage: React.FC = () => {
     </tr>
   );
 
-  // Helper to render a property section
-  const renderPropertySection = (title: string, keys: string[], propertyGroup: keyof Material) => {
+  const renderPropertySection = (title: string, keys: string[], propertyGroup: keyof Material['technicalSpecifications']) => {
     if (keys.length === 0) return null;
     return (
       <>
@@ -125,7 +112,7 @@ export const ContrastPage: React.FC = () => {
            <td colSpan={materials.length} className="bg-agri-50/50"></td>
         </tr>
         {keys.map(key => renderRow(key, (m) => {
-          const group = m[propertyGroup] as Record<string, string> | undefined;
+          const group = m.technicalSpecifications[propertyGroup];
           return group?.[key] || '-';
         }))}
       </>
@@ -149,23 +136,20 @@ export const ContrastPage: React.FC = () => {
          </div>
       </div>
 
-      {/* Visualization Section */}
       <div className="max-w-7xl mx-auto mb-10 grid md:grid-cols-3 gap-8">
          <div className="md:col-span-1 bg-slate-50 p-6 rounded-2xl border border-slate-200">
             <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
                <BarChart2 size={18} className="text-agri-600"/> 性能图谱分析
             </h3>
             <p className="text-sm text-slate-600 leading-relaxed mb-6">
-               雷达图展示了各材料在关键力学性能上的相对强弱（基于当前对比组数据的归一化得分）。
-               <br/><br/>
-               <span className="text-xs text-slate-400 block mt-2">* 数据越靠外代表该项性能指标数值越高。</span>
+               雷达图展示了各材料在关键力学性能上的相对强弱。
             </p>
             <div className="space-y-3">
                {materials.map((m, idx) => (
                   <div key={m.id} className="flex items-center gap-2 text-sm">
                      <span className="w-3 h-3 rounded-full" style={{backgroundColor: colors[idx % colors.length]}}></span>
                      <span className="font-bold text-slate-700">{m.name}</span>
-                     <span className="text-xs text-slate-400 font-mono ml-auto">{m.grade}</span>
+                     <span className="inline-block whitespace-nowrap text-[10px] px-1.5 py-0.5 bg-agri-50 text-agri-700 border border-agri-100 rounded font-mono ml-auto">{m.grade}</span>
                   </div>
                ))}
             </div>
@@ -189,17 +173,12 @@ export const ContrastPage: React.FC = () => {
                   ))}
                   <Tooltip 
                      contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
-                     formatter={(value: any, name: any, props: any) => {
-                        // Try to find the raw value if possible, simplified here
-                        return [value + ' / 100', name]; 
-                     }}
                   />
                 </RadarChart>
              </ResponsiveContainer>
          </div>
       </div>
 
-      {/* Data Table */}
       <div className="max-w-full overflow-x-auto shadow-sm border border-slate-200 rounded-xl">
         <table className="w-full text-left text-sm whitespace-nowrap">
           <thead>
@@ -212,19 +191,18 @@ export const ContrastPage: React.FC = () => {
                   <div className="font-bold text-base text-slate-900">{m.name}</div>
                   <div className="flex gap-2 mt-1">
                       <span className="text-xs px-2 py-0.5 bg-white border border-slate-300 rounded text-slate-600">{m.category}</span>
-                      <span className="text-xs px-2 py-0.5 bg-agri-50 text-agri-700 border border-agri-100 rounded font-mono">{m.grade}</span>
+                      <span className="inline-block whitespace-nowrap text-xs px-2 py-0.5 bg-agri-50 text-agri-700 border border-agri-100 rounded font-mono">{m.grade}</span>
                   </div>
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {/* Basic Info */}
             <tr className="bg-agri-50/50 border-b border-agri-100">
                 <td className="p-2.5 border-r border-agri-200 sticky left-0 bg-agri-50 z-10 font-bold text-agri-800 text-sm" colSpan={1}>基本信息</td>
                 <td colSpan={materials.length} className="bg-agri-50/50"></td>
             </tr>
-            {renderRow('标准牌号', m => m.grade || '-')}
+            {renderRow('标准牌号', m => <span className="inline-block whitespace-nowrap px-2 py-0.5 bg-agri-50 text-agri-700 border border-agri-100 rounded font-mono text-xs">{m.grade}</span>)}
             {renderRow('适用标准', m => m.standard || '-')}
             {renderRow('产品形态', m => m.shape || '-')}
             {renderRow('供货状态', m => m.supplyCondition || '-')}
@@ -236,13 +214,11 @@ export const ContrastPage: React.FC = () => {
             ))}
             {renderRow('描述', m => <span className="whitespace-normal block min-w-[180px] max-w-[250px] leading-relaxed text-slate-600 text-xs">{m.description}</span>)}
 
-            {/* Properties */}
-            {renderPropertySection('化学成分', chemicalKeys, 'chemicalComposition')}
-            {renderPropertySection('力学性能', mechanicalKeys, 'mechanicalProperties')}
-            {renderPropertySection('物理性能', physicalKeys, 'physicalProperties')}
-            {renderPropertySection('热性能', thermalKeys, 'thermalProperties')}
+            {renderPropertySection('化学成分', chemicalKeys, '化学成分')}
+            {renderPropertySection('力学性能', mechanicalKeys, '力学性能')}
+            {renderPropertySection('物理性能', physicalKeys, '物理性能')}
+            {renderPropertySection('热性能', thermalKeys, '热性能')}
 
-             {/* Specifics */}
              <tr className="bg-agri-50/50 border-b border-agri-100">
                 <td className="p-2.5 border-r border-agri-200 sticky left-0 bg-agri-50 z-10 font-bold text-agri-800 text-sm" colSpan={1}>其他特性</td>
                 <td colSpan={materials.length} className="bg-agri-50/50"></td>
